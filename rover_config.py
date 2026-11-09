@@ -45,6 +45,13 @@ DEFAULTS = {
     "ARENA": {},                    # game setting changes, e.g. {"HP": 15, "CLUE_EVERY_S": 45}
     # Face Cam (facecam.py)
     "FACECAM": {},                  # e.g. {"COOLDOWN_S": 5, "START_WATCHING": true}
+    # lights and horn (lights.py), Armored Rover body
+    "LIGHTS": True,
+    "HEADLIGHT_GPIO": 16,           # pin 36
+    "TAIL_LEFT_GPIO": 20,           # pin 38
+    "TAIL_RIGHT_GPIO": 21,          # pin 40
+    "HORN_GPIO": 26,                # pin 37
+    "HORN_ACTIVE_HIGH": True,       # false if the horn module beeps when it should be quiet
 }
 
 

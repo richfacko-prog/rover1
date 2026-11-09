@@ -15,6 +15,7 @@ Pages (open on your PC):
 Speed: Slow / Medium / Fast buttons, or keys 1 / 2 / 3 (7 / 8 / 9 for the right rover).
 Turning always uses FULL power in every speed mode (4-wheel rovers need it to spin).
 Camera tilt (if USE_TILT is on): R / F keys (Page Up / Page Down for the right rover).
+Lights: L toggles the headlights, hold H for the horn (see lights.py for the wiring).
 
 Safety:
 - The robot stops on its own if it stops hearing from the browser
@@ -50,6 +51,12 @@ try:
 except Exception as e:
     facecam = None
     print(f"Face Cam not available ({e}). Driving still works.")
+
+try:
+    from lights import lights, handle_post as lights_post   # headlights, taillights, horn
+except Exception as e:
+    lights = None
+    print(f"Lights/horn not available ({e}). Driving still works.")
 
 # ---------------------------------------------------------------------------
 # SETTINGS (shared by both rovers; per-rover ones are in ~/rover.json)
@@ -291,6 +298,9 @@ PAGE = """<!doctype html>
       <button data-cmd="left">&#9664;</button><button data-cmd="stop">&#9632;</button><button data-cmd="right">&#9654;</button>
       <span></span><button data-cmd="backward">&#9660;</button><span></span>
     </div>
+    <div class="row extras" hidden>
+      <button data-lights="1">Lights</button><button data-horn="1">Horn</button>
+    </div>
     <div class="row tilt" hidden>
       <button data-tilt="up">Tilt &#8593;</button><button data-tilt="center">Level</button><button data-tilt="down">Tilt &#8595;</button>
     </div>
@@ -339,6 +349,13 @@ function makePane(host, i, total) {
       b.classList.toggle("sel", b.dataset.speed === m));
   p.speed = m => { p.showSpeed(m); fetch(p.base + "/speed/" + m, {method: "POST"}).catch(() => {}); };
   p.tilt = t => fetch(p.base + "/tilt/" + t, {method: "POST"}).catch(() => {});
+  p.lights = () => fetch(p.base + "/lights/toggle", {method: "POST"}).catch(() => {});
+  p.hornTimer = null;
+  p.horn = on => {
+    clearInterval(p.hornTimer); p.hornTimer = null;
+    fetch(p.base + "/horn/" + (on ? "on" : "off"), {method: "POST"}).catch(() => {});
+    if (on) p.hornTimer = setInterval(() => fetch(p.base + "/horn/on", {method: "POST"}).catch(() => {}), 150);
+  };
   p.startStream = () => { p.img.src = p.base + "/stream.mjpg?t=" + Date.now(); };
   p.img.onload = () => { p.off.hidden = true; p.img.style.visibility = ""; };
   p.img.onerror = () => {
@@ -352,6 +369,10 @@ function makePane(host, i, total) {
   });
   el.querySelectorAll("button[data-speed]").forEach(b => b.addEventListener("click", () => p.speed(b.dataset.speed)));
   el.querySelectorAll("button[data-tilt]").forEach(b => b.addEventListener("click", () => p.tilt(b.dataset.tilt)));
+  el.querySelector("button[data-lights]").addEventListener("click", () => p.lights());
+  const hb = el.querySelector("button[data-horn]");
+  hb.addEventListener("pointerdown", e => { e.preventDefault(); p.horn(true); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => hb.addEventListener(ev, () => p.horn(false)));
   document.getElementById("panes").appendChild(el);
   p.startStream();
   return p;
@@ -367,6 +388,8 @@ function poll(p) {
     if (p.img.naturalWidth > 0) { p.off.hidden = true; p.img.style.visibility = ""; }
     p.showSpeed(s.speed);
     p.el.querySelector(".tilt").hidden = !s.tilt;
+    p.el.querySelector(".extras").hidden = !s.lights;
+    p.el.querySelector("button[data-lights]").classList.toggle("sel", !!s.headlights);
     const dist = p.el.querySelector(".dist");
     if (s.dist === null) { dist.textContent = s.sensor ? "sensor: no reading" : ""; dist.classList.remove("close"); return; }
     dist.textContent = "Distance ahead: " + Math.round(s.dist) + " cm" + (s.blocked ? "  (too close, forward blocked)" : "");
@@ -398,6 +421,8 @@ document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" && e.target.type !== "checkbox") return;
   const key = keyName(e);
   if (key === " ") { e.preventDefault(); stopAll(); return; }
+  if (key === "l" && !e.repeat) { targets(0).forEach(p => p.lights()); return; }
+  if (key === "h") { e.preventDefault(); if (!e.repeat) targets(0).forEach(p => p.horn(true)); return; }
   KEYSETS.forEach((ks, k) => {
     if (ks.drive[key]) {
       e.preventDefault();
@@ -413,6 +438,7 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("keyup", e => {
   const key = keyName(e);
+  if (key === "h") { targets(0).forEach(p => p.horn(false)); return; }
   KEYSETS.forEach((ks, k) => {
     const c = ks.drive[key];
     if (!c) return;
@@ -420,7 +446,7 @@ document.addEventListener("keyup", e => {
     update(k);
   });
 });
-window.addEventListener("blur", stopAll);
+window.addEventListener("blur", () => { stopAll(); panes.forEach(p => p.horn(false)); });
 document.addEventListener("visibilitychange", () => { if (document.hidden) stopAll(); });
 
 // keep sending the current command so the rover's safety stop doesn't kick in
@@ -444,7 +470,7 @@ if (FLEET_MODE) {
   document.getElementById("link").addEventListener("change", e => { stopAll(); e.target.blur(); });
   hint.textContent = "Left rover: W A S D, speed 1 2 3, tilt R F  ·  Right rover: arrow keys, speed 7 8 9, tilt Page Up / Page Down  ·  Space stops everything  ·  let go to stop";
 } else {
-  hint.innerHTML = 'Arrow keys or W A S D to drive &middot; let go to stop &middot; 1 / 2 / 3 = slow / medium / fast &middot; <a href="/fleet" style="color:#8cf">split screen</a> &middot; <a href="/arena" style="color:#8cf">arena games</a>';
+  hint.innerHTML = 'Arrow keys or W A S D to drive &middot; let go to stop &middot; 1 / 2 / 3 = slow / medium / fast &middot; L lights &middot; hold H horn &middot; <a href="/fleet" style="color:#8cf">split screen</a> &middot; <a href="/arena" style="color:#8cf">arena games</a>';
 }
 </script>
 </body></html>
@@ -495,6 +521,8 @@ class Handler(server.BaseHTTPRequestHandler):
                     "tilt": tilt.ok, "tilt_us": state["tilt"],
                     "camera": output is not None,
                 }
+            if lights:
+                info.update(lights.state())
             if arena:
                 info.update(arena.status_extra(url.query))   # markers the camera sees
             self._send(200, "application/json", json.dumps(info).encode())
@@ -544,6 +572,8 @@ class Handler(server.BaseHTTPRequestHandler):
             return                                            # a game request
         if facecam and facecam.handle_post(self, path):
             return                                            # a Face Cam button
+        if lights and lights_post(self, path):
+            return                                            # lights / horn
         parts = path.strip("/").split("/")
         if len(parts) != 2:
             self.send_error(404)
@@ -592,6 +622,8 @@ if __name__ == "__main__":
         arena.attach(lambda: output.frame if output else None)
     if facecam:
         facecam.attach(lambda: output.frame if output else None)
+    if lights:
+        lights.attach(lambda: state["cmd"])
 
     threading.Thread(target=watchdog, daemon=True).start()
     if USE_SENSOR:
@@ -611,6 +643,8 @@ if __name__ == "__main__":
     finally:
         apply("stop")
         tilt.relax()
+        if lights:
+            lights.off()
         if picam2:
             picam2.stop_recording()
         print("\nStopped.")

@@ -23,6 +23,7 @@ camera and drive with the arrow keys from a web browser. Two rovers run the same
 | `sensor_test.py`, `diagnose.py` | Check the distance sensor wiring. |
 | `wheel_test.py`, `calibrate.py` | Check / fix which way the wheels spin (saved to `~/rover.json`). |
 | `servo_test.py` | Check the tilt servo. |
+| `lights.py` | Headlights (L key), taillights with brake lights and turn signals, horn (hold H) with a reverse beep. |
 
 ## Per-rover settings
 Both Pis run identical code. What's different about each rover lives in `~/rover.json` on that Pi
@@ -48,6 +49,9 @@ git clone https://github.com/richfacko-prog/rover1.git ~/rover && sudo bash ~/ro
 | Sensor Echo | 1k resistor → joining row → 31; joining row → 2k resistor → 20 |
 | Fan (official Pi 4 case fan) | red 4, black 6, blue 8 |
 | Tilt servo (SG90) | yellow 32, red 5V, black 34 |
+| Headlights (2 white LEDs, 33 Ω each) | pin 36 (GPIO 16) → resistor → LED +, LED − → GND pin 34 |
+| Taillights (red LEDs, 150 Ω each) | left pin 38 (GPIO 20), right pin 40 (GPIO 21), LED − → GND pin 39 |
+| Horn (active buzzer module) | VCC → 3.3V pin 17, GND → pin 30, I/O → pin 37 (GPIO 26) |
 
 Wheel directions are per rover (`FLIP_LEFT` / `FLIP_RIGHT` / `SWAP_SIDES` in `~/rover.json`; Rover 1 uses the defaults).
 
