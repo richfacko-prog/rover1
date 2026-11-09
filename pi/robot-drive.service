@@ -1,0 +1,14 @@
+[Unit]
+Description=Robot camera + drive web page (robot_drive.py)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__REPO__
+ExecStart=/usr/bin/python3 __REPO__/robot_drive.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

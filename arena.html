@@ -1,0 +1,1092 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0d12">
+<link rel="icon" href="data:,">
+<title>Robot Arena</title>
+<style>
+:root { --bg:#0b0d12; --panel:#151922; --line:#2a3140; --ink:#eef2f8; --dim:#8a93a6;
+        --hot:#ff3b4e; --gold:#ffc83d; --ok:#3ddc84; --ice:#5ab8ff; }
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+html, body { margin:0; background:var(--bg); color:var(--ink);
+  font-family:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color:transparent; }
+body { min-height:100vh; overscroll-behavior:none; }
+button { font:inherit; color:inherit; border:0; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
+.mono { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+
+/* ---------- join screen ---------- */
+#join { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:18px; padding:24px 16px; text-align:center;
+  background:radial-gradient(ellipse at 50% 0%, #1a2233 0%, var(--bg) 60%); }
+#join h1 { font-size:clamp(38px, 9vw, 72px); margin:0; letter-spacing:.06em; font-weight:900; line-height:1;
+  background:linear-gradient(90deg, var(--c0, #22aa77), var(--gold), var(--c1, #3b82f6));
+  -webkit-background-clip:text; background-clip:text; color:transparent; }
+#join p { color:var(--dim); margin:0; max-width:540px; }
+.choices { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; width:min(780px, 100%); }
+.choice { background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:16px; text-align:left;
+  display:flex; flex-direction:column; gap:6px; min-height:100px; transition:border-color .15s, transform .15s; }
+.choice:hover, .choice:focus-visible { border-color:var(--c, #fff); outline:none; transform:translateY(-2px); }
+.choice b { font-size:18px; display:flex; align-items:center; gap:8px; }
+.choice span { color:var(--dim); font-size:14px; }
+.dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:#555; flex:none; }
+.dot.live { background:var(--c); box-shadow:0 0 8px var(--c); }
+#join small { color:var(--dim); }
+#join small a, #bar a { color:#8cf; }
+
+/* ---------- top bar ---------- */
+#bar { display:flex; align-items:center; gap:8px; padding:8px 12px; flex-wrap:wrap;
+  border-bottom:1px solid var(--line); background:#0e1118; position:sticky; top:0; z-index:5; }
+#bar .brand { font-weight:900; letter-spacing:.08em; }
+#bar select, #bar .btn { height:34px; background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  color:var(--ink); padding:0 10px; font-size:14px; }
+#bar .btn.go { background:var(--ok); color:#06210f; border-color:transparent; font-weight:800; }
+#bar .btn.stop { background:#3a1d22; border-color:#6b2b35; }
+#bar .spacer { flex:1; }
+#score { display:flex; align-items:center; gap:12px; font-weight:800; }
+#score .clock { font-size:20px; min-width:64px; text-align:center; }
+#score .who { display:flex; align-items:center; gap:6px; }
+#score .sw { width:10px; height:10px; border-radius:3px; }
+#score .what { font-size:12px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:.08em; }
+
+/* ---------- panes ---------- */
+#main { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; padding:12px; }
+.pane { flex:1 1 440px; max-width:980px; display:flex; flex-direction:column; gap:8px; }
+.pane .title { display:flex; align-items:center; gap:8px; font-weight:800; }
+.pane .title .role { margin-left:auto; font-size:12px; color:var(--dim); font-weight:600; letter-spacing:.06em; }
+.view { position:relative; width:100%; aspect-ratio:4/3; max-height:calc(100vh - 230px); margin:0 auto;
+  background:#000; border-radius:12px; overflow:hidden; border:2px solid var(--c, #333); }
+.view > img, .view > canvas { position:absolute; inset:0; width:100%; height:100%; }
+.view > img { object-fit:contain; }
+.view .off { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--dim); padding:12px; text-align:center; }
+.view.shake { animation:shake .45s; }
+@keyframes shake { 10%,90%{transform:translate(-2px,1px)} 20%,80%{transform:translate(5px,-3px)}
+  30%,50%,70%{transform:translate(-8px,4px)} 40%,60%{transform:translate(8px,-2px)} }
+
+.hud { position:absolute; inset:0; pointer-events:none; padding:10px; display:flex; flex-direction:column;
+  justify-content:space-between; text-shadow:0 1px 3px #000, 0 0 2px #000; }
+.hud .row { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+.hud .row.bot { align-items:flex-end; }
+.hud .col { display:flex; flex-direction:column; gap:6px; }
+.hud .col.r { align-items:flex-end; }
+.tag { font-size:13px; font-weight:800; background:rgba(0,0,0,.5); padding:3px 8px; border-radius:6px; letter-spacing:.04em; }
+.tag.warn { color:var(--gold); }
+.tag.hotbg { background:var(--hot); color:#fff; text-shadow:none; }
+.tag.icebg { background:var(--ice); color:#04121f; text-shadow:none; }
+.hp { display:flex; gap:2px; }
+.hp i { width:clamp(8px, 1.5vw, 16px); height:12px; border-radius:2px; background:var(--ok); box-shadow:0 0 6px rgba(61,220,132,.6); }
+.hp.lo i { background:var(--gold); box-shadow:0 0 6px rgba(255,200,61,.6); }
+.hp.crit i { background:var(--hot); box-shadow:0 0 6px rgba(255,59,78,.7); animation:blink .5s infinite alternate; }
+.hp i.gone { background:rgba(255,255,255,.15); box-shadow:none; animation:none; }
+@keyframes blink { to { opacity:.45; } }
+.ammo { display:flex; gap:3px; align-items:flex-end; }
+.ammo i { width:5px; height:16px; border-radius:1px; background:var(--gold); }
+.ammo i.gone { background:rgba(255,255,255,.18); }
+.bar { width:120px; height:8px; border-radius:4px; background:rgba(255,255,255,.18); overflow:hidden; }
+.bar b { display:block; height:100%; background:var(--gold); }
+
+.strip { display:flex; gap:6px; overflow-x:auto; padding:2px 0; min-height:0; }
+.strip:empty { display:none; }
+.strip .th { height:62px; aspect-ratio:4/3; border-radius:6px; border:2px solid var(--line); cursor:pointer; flex:none;
+  position:relative; overflow:hidden; background:#000; }
+.strip .th img { width:100%; height:100%; object-fit:cover; display:block; }
+.strip .th span { position:absolute; left:3px; top:2px; font-size:11px; font-weight:800; text-shadow:0 1px 2px #000; }
+.strip .th.jam { background:repeating-linear-gradient(45deg, #222 0 6px, #333 6px 12px); }
+
+.polaroid { position:absolute; left:50%; top:50%; width:min(62%, 520px); background:#f4f1ea; padding:10px 10px 36px;
+  border-radius:4px; box-shadow:0 18px 50px rgba(0,0,0,.75); transform:translate(-50%,-50%) rotate(-3deg);
+  animation:drop .7s cubic-bezier(.2,1.4,.4,1); color:#222; font-weight:800; text-align:center; cursor:pointer; z-index:2; }
+.polaroid .pic { width:100%; aspect-ratio:4/3; background:#000; display:block; object-fit:cover; }
+.polaroid .pic.jam { background:repeating-linear-gradient(45deg, #222 0 8px, #444 8px 16px); display:flex;
+  align-items:center; justify-content:center; color:#ff6; font-size:22px; letter-spacing:.1em; }
+.polaroid span { position:absolute; left:0; right:0; bottom:9px; font-size:15px; }
+.polaroid.out { animation:fly .5s ease-in forwards; }
+@keyframes drop { from { transform:translate(-50%,-170%) rotate(16deg); opacity:0; } to { transform:translate(-50%,-50%) rotate(-3deg); opacity:1; } }
+@keyframes fly { to { transform:translate(-50%,110%) rotate(10deg) scale(.25); opacity:0; } }
+#lightbox { position:fixed; inset:0; background:rgba(0,0,0,.88); display:flex; align-items:center; justify-content:center; z-index:9; padding:16px; }
+#lightbox img { max-width:100%; max-height:100%; border-radius:8px; }
+
+/* ---------- controls ---------- */
+.ctl { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.pad { display:grid; grid-template-columns:repeat(3, 64px); grid-template-rows:repeat(3, 56px); gap:6px; }
+.pad button { background:#232a37; border-radius:12px; font-size:22px; touch-action:none; }
+.pad button.on { background:var(--c); }
+.mid { display:flex; flex-direction:column; gap:6px; align-items:center; }
+.speeds { display:flex; gap:4px; flex-wrap:wrap; justify-content:center; }
+.speeds button { height:30px; padding:0 10px; border-radius:8px; background:#232a37; font-size:13px; }
+.speeds button.sel { background:#d9822b; }
+.acts { display:flex; align-items:center; gap:12px; }
+.fire { width:104px; height:104px; border-radius:50%; font-weight:900; font-size:20px; letter-spacing:.06em; touch-action:none;
+  background:radial-gradient(circle at 35% 30%, #ff7a86, var(--hot) 60%, #a01526);
+  box-shadow:0 6px 0 #6d0e1a, 0 0 24px rgba(255,59,78,.45); transition:transform .05s; }
+.fire.on { transform:translateY(4px); box-shadow:0 2px 0 #6d0e1a, 0 0 30px rgba(255,59,78,.8); }
+.fire:disabled { filter:grayscale(1) brightness(.55); }
+.spec { width:78px; height:78px; border-radius:50%; background:#26304a; font-weight:900; font-size:13px; border:2px solid #4d5f8f; touch-action:none; }
+.spec:disabled { opacity:.4; }
+.keys { font-size:12px; color:var(--dim); text-align:center; }
+#hint { color:var(--dim); font-size:13px; text-align:center; padding:0 12px 18px; }
+
+/* ---------- phones: one compact row on top ---------- */
+body.phone #main { padding:8px; }
+body.phone .pane { flex-basis:100%; }
+body.phone #bar { flex-wrap:nowrap; overflow-x:auto; gap:6px; padding:6px 8px; scrollbar-width:none; }
+body.phone #bar::-webkit-scrollbar { display:none; }
+body.phone #bar .brand, body.phone #bar .spacer, body.phone #score .what { display:none; }
+body.phone #bar select, body.phone #bar .btn { height:30px; font-size:13px; padding:0 8px; flex:none; }
+body.phone #score { margin:0 4px; gap:8px; flex:none; }
+body.phone #score .clock { font-size:17px; min-width:0; }
+body.phone .polaroid { width:min(46%, 360px); padding:6px 6px 26px; }
+body.phone .polaroid span { font-size:12px; bottom:6px; }
+/* held sideways: a game-controller layout, D-pad left, camera middle, buttons right */
+@media (orientation:landscape) and (max-height:560px) {
+  body.phone #arena { display:flex; flex-direction:column; height:100vh; height:100dvh; }
+  body.phone #main { flex:1; min-height:0; padding:6px 8px; }
+  body.phone #hint, body.phone .keys { display:none; }
+  body.phone .pane { height:100%; display:grid; grid-template-columns:auto minmax(0, 1fr) auto;
+    grid-template-rows:minmax(0, 1fr) auto; grid-template-areas:"pad view acts" "pad strip acts";
+    align-items:center; gap:4px 10px; }
+  body.phone .pane .title { display:none; }
+  body.phone .view { grid-area:view; height:100%; width:auto; max-width:100%; max-height:100%; }
+  body.phone .ctl { display:contents; }
+  body.phone .pad { grid-area:pad; }
+  body.phone .acts { grid-area:acts; flex-direction:column; }
+  body.phone .mid { display:none; }
+  body.phone .strip { grid-area:strip; }
+  body.phone .strip .th { height:40px; }
+}
+</style></head>
+<body>
+
+<section id="join">
+  <h1>ROBOT ARENA</h1>
+  <p>Laser battles, Manhunt and treasure hunts, all seen through your rovers' cameras.
+     How are you playing?</p>
+  <div class="choices" id="choices"></div>
+  <small>Each rover needs its printed marker &middot; <a href="/markers" target="_blank">print markers</a>
+    &middot; <a href="/fleet">plain split screen</a></small>
+</section>
+
+<section id="arena" hidden>
+  <div id="bar">
+    <span class="brand">ROBOT ARENA</span>
+    <select id="mode" aria-label="Game">
+      <option value="battle">Laser Battle</option>
+      <option value="manhunt">Manhunt</option>
+      <option value="treasure">Treasure Hunt</option>
+      <option value="free">Free drive</option>
+    </select>
+    <select id="hider" aria-label="Who hides" hidden></select>
+    <button class="btn go" id="start">Start</button>
+    <button class="btn stop" id="stopg">End game</button>
+    <div class="spacer"></div>
+    <div id="score"></div>
+    <div class="spacer"></div>
+    <button class="btn" id="mute" title="Sound on/off">Sound: on</button>
+    <button class="btn" id="change">Switch</button>
+  </div>
+  <div id="main"></div>
+  <div id="hint"></div>
+</section>
+
+<div id="lightbox" hidden><img alt="clue photo"></div>
+
+<template id="tpl">
+  <div class="pane">
+    <div class="title"><span class="dot"></span><span class="name">...</span><span class="role"></span></div>
+    <div class="view">
+      <img alt="camera">
+      <div class="off">connecting...</div>
+      <canvas></canvas>
+      <div class="hud">
+        <div class="row"><div class="col tl"></div><div class="col r tr"></div></div>
+        <div class="row bot"><div class="col bl"></div><div class="col r br"></div></div>
+      </div>
+    </div>
+    <div class="strip"></div>
+    <div class="ctl">
+      <div class="pad">
+        <span></span><button data-cmd="forward" aria-label="forward">&#9650;</button><span></span>
+        <button data-cmd="left" aria-label="left">&#9664;</button><button data-cmd="stop" aria-label="stop">&#9632;</button><button data-cmd="right" aria-label="right">&#9654;</button>
+        <span></span><button data-cmd="backward" aria-label="back">&#9660;</button><span></span>
+      </div>
+      <div class="mid">
+        <div class="speeds">
+          <button data-speed="slow">Slow</button><button data-speed="medium">Med</button><button data-speed="fast">Fast</button>
+        </div>
+        <div class="speeds tilt" hidden>
+          <button data-tilt="up">Tilt &#8593;</button><button data-tilt="center">Level</button><button data-tilt="down">Tilt &#8595;</button>
+        </div>
+      </div>
+      <div class="acts">
+        <button class="spec">SHIELD</button>
+        <button class="fire">FIRE</button>
+      </div>
+    </div>
+    <div class="keys"></div>
+  </div>
+</template>
+
+<script>
+"use strict";
+const DEFAULT_LIST = __DEFAULT_LIST__;
+const PORT = __PORT__;
+const MODE_NAMES = { battle: "Laser Battle", manhunt: "Manhunt", treasure: "Treasure Hunt", free: "Free drive" };
+const COLORS = ["#22aa77", "#3b82f6"];
+
+// ---------- which rovers ----------
+const qs = new URLSearchParams(location.search);
+function readList() {
+  let saved = null;
+  try { saved = localStorage.getItem("rovers"); } catch (e) {}
+  return (qs.get("r") || saved || DEFAULT_LIST.join(",")).split(",").map(s => s.trim()).filter(Boolean).slice(0, 2);
+}
+function baseUrl(h) {
+  if (h.startsWith("http")) return h.replace(/\/$/, "");
+  return "http://" + h + (h.includes(":") ? "" : ":" + PORT);
+}
+const LIST = readList();
+const HOST = baseUrl(LIST[0]);            // the first rover runs the game for everyone
+const $ = (s, el = document) => el.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fmt = s => { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+
+const R = LIST.map((h, i) => ({
+  i, host: h, base: baseUrl(h), name: h.split(".")[0], color: COLORS[i], online: false,
+  markers: [], mseen: 0, markerId: i + 1, vision: "", tilt: false, speed: "fast",
+  cmd: "stop", held: [], fx: [], el: null, lastShot: 0, busy: false, statsT: 0,
+}));
+
+let ROLE = null;      // "0" / "1" = this phone is that rover, "both" = one PC, "watch" = big screen
+let G = null;         // latest game state from the host
+let SEQ = null;
+let overInfo = null;
+let lastCount = null;
+
+const controls = i => ROLE === "both" || ROLE === String(i);
+const visible = i => ROLE === "both" || ROLE === "watch" || ROLE === String(i);
+const gp = i => (G && G.players && G.players[i]) || null;
+const playing = () => G && G.mode !== "free" && G.phase !== "idle";
+
+// ---------- sound (made on the fly, no files needed) ----------
+const sfx = (() => {
+  let ac = null, muted = false;
+  function ctx() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+    if (ac.state === "suspended") ac.resume();
+    return ac;
+  }
+  function tone(f0, f1, d, type = "square", vol = 0.1, delay = 0) {
+    const a = ctx(); if (!a || muted) return;
+    const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), t + d);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(a.destination); o.start(t); o.stop(t + d + 0.03);
+  }
+  function noise(d, vol = 0.3, lp = 1200) {
+    const a = ctx(); if (!a || muted) return;
+    const n = (a.sampleRate * d) | 0, b = a.createBuffer(1, n, a.sampleRate), ch = b.getChannelData(0);
+    for (let k = 0; k < n; k++) ch[k] = (Math.random() * 2 - 1) * Math.pow(1 - k / n, 2);
+    const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+    s.buffer = b; f.type = "lowpass"; f.frequency.value = lp; g.gain.value = vol;
+    s.connect(f).connect(g).connect(a.destination); s.start();
+  }
+  return {
+    unlock: ctx, toggle() { muted = !muted; return !muted; },
+    pew() { tone(1500, 160, 0.17, "square", 0.07); },
+    boom() { noise(0.7, 0.55, 900); tone(140, 35, 0.45, "sine", 0.3); },
+    miss() { tone(320, 200, 0.09, "triangle", 0.06); },
+    hurt() { noise(0.35, 0.5, 500); tone(200, 60, 0.3, "sawtooth", 0.1); },
+    shield() { tone(280, 1100, 0.4, "sine", 0.12); },
+    click() { tone(90, 80, 0.05, "square", 0.05); },
+    beep() { tone(880, 880, 0.08, "square", 0.05); },
+    coin() { tone(988, 988, 0.08, "square", 0.08); tone(1319, 1319, 0.28, "square", 0.08, 0.08); },
+    shutter() { noise(0.09, 0.45, 7000); },
+    clue() { tone(660, 660, 0.1, "triangle", 0.12); tone(990, 990, 0.18, "triangle", 0.12, 0.11); },
+    tick() { tone(1200, 1200, 0.05, "square", 0.05); },
+    go() { tone(1046, 1046, 0.4, "square", 0.09); },
+    win() { [523, 659, 784, 1047].forEach((f, k) => tone(f, f, 0.24, "square", 0.08, k * 0.14)); },
+    lose() { [392, 330, 262].forEach((f, k) => tone(f, f * 0.97, 0.32, "sawtooth", 0.07, k * 0.2)); },
+  };
+})();
+
+// ---------- join screen ----------
+function buildJoin() {
+  const box = $("#choices");
+  const add = (role, title, sub, color) => {
+    const b = document.createElement("button");
+    b.className = "choice";
+    b.style.setProperty("--c", color);
+    b.innerHTML = '<b><i class="dot"></i><span class="t"></span></b><span class="s"></span>';
+    $(".t", b).textContent = title; $(".s", b).textContent = sub;
+    b.onclick = () => join(role);
+    box.appendChild(b);
+    return b;
+  };
+  R.forEach(r => { r.joinBtn = add(String(r.i), "Drive " + r.name, "This phone is the controller for this rover", r.color); });
+  if (R.length > 1) {
+    add("both", "Both players, one PC", "Split screen. Left: W A S D + E fire. Right: arrows + Enter fire", "#ffc83d").querySelector(".dot").remove();
+  }
+  add("watch", "Watch", "Big screen for the audience: both cameras and the score", "#bbb").querySelector(".dot").remove();
+  document.documentElement.style.setProperty("--c0", R[0] ? R[0].color : COLORS[0]);
+  document.documentElement.style.setProperty("--c1", R[1] ? R[1].color : COLORS[1]);
+}
+
+function join(role) {
+  ROLE = role;
+  sfx.unlock();
+  $("#join").hidden = true;
+  $("#arena").hidden = false;
+  document.body.classList.toggle("phone", role === "0" || role === "1");
+  const main = $("#main"); main.innerHTML = "";
+  R.forEach(r => { r.el = null; if (visible(r.i)) buildPane(r); });
+  post("/game/rovers", { rovers: LIST });
+  updateHint();
+  lastCount = null;
+  if (G) { rebuildStrip(true); syncBar(true); }
+}
+
+// ---------- one pane per visible rover ----------
+function buildPane(r) {
+  const el = $("#tpl").content.firstElementChild.cloneNode(true);
+  r.el = el;
+  el.style.setProperty("--c", r.color);
+  r.view = $(".view", el); r.img = $("img", r.view); r.off = $(".off", r.view);
+  r.cv = $("canvas", r.view); r.ctx = r.cv.getContext("2d");
+  r.hud = { tl: $(".tl", el), tr: $(".tr", el), bl: $(".bl", el), br: $(".br", el) };
+  r.strip = $(".strip", el); r.fireBtn = $(".fire", el); r.specBtn = $(".spec", el);
+  $(".name", el).textContent = r.name;
+  $(".ctl", el).hidden = !controls(r.i);
+  $(".keys", el).textContent = ROLE === "both"
+    ? (r.i === 0 ? "W A S D drive · E fire · Q special · 1 2 3 speed" : "Arrows drive · Enter fire · Right Shift special · 7 8 9 speed")
+    : (controls(r.i) ? "Keyboard works too: arrows or W A S D · Space fire · Q special" : "");
+
+  el.querySelectorAll(".pad button").forEach(b => {
+    b.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      try { b.setPointerCapture(e.pointerId); } catch (err) {}   // keeps driving if the thumb slides a bit
+      setCmd(r, b.dataset.cmd);
+    });
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach(ev => b.addEventListener(ev, () => setCmd(r, "stop")));
+  });
+  el.querySelectorAll("[data-speed]").forEach(b => b.addEventListener("click", () => setSpeed(r, b.dataset.speed)));
+  el.querySelectorAll("[data-tilt]").forEach(b => b.addEventListener("click", () => tilt(r, b.dataset.tilt)));
+  r.fireBtn.addEventListener("pointerdown", e => { e.preventDefault(); r.fireBtn.classList.add("on"); doFire(r.i); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => r.fireBtn.addEventListener(ev, () => r.fireBtn.classList.remove("on")));
+  r.specBtn.addEventListener("click", () => doSpecial(r.i));
+
+  r.img.onload = () => { r.off.hidden = true; };
+  r.img.onerror = () => {
+    r.off.hidden = false;
+    r.off.textContent = r.online ? "no camera picture" : "can't reach " + r.host;
+    clearTimeout(r.retry); r.retry = setTimeout(() => startStream(r), 3000);
+  };
+  $("#main").appendChild(el);
+  startStream(r);
+}
+function startStream(r) { if (r.el) r.img.src = r.base + "/stream.mjpg?t=" + Date.now(); }
+
+// ---------- driving ----------
+function canDrive(i) {
+  if (!controls(i)) return false;
+  if (G && G.phase === "countdown") return false;
+  if (G && G.mode === "manhunt" && G.phase === "hide" && G.manhunt.hunter === i) return false;  // blindfolded
+  return true;
+}
+function send(r, c) { fetch(r.base + "/drive/" + c, { method: "POST" }).catch(() => {}); }
+function setCmd(r, c) {
+  if (c !== "stop" && !canDrive(r.i)) c = "stop";
+  if (c === r.cmd) return;
+  r.cmd = c; send(r, c);
+  if (r.el) r.el.querySelectorAll(".pad button").forEach(b => b.classList.toggle("on", b.dataset.cmd === c && c !== "stop"));
+}
+function setSpeed(r, m) { r.speed = m; showSpeed(r); fetch(r.base + "/speed/" + m, { method: "POST" }).catch(() => {}); }
+function showSpeed(r) { if (r.el) r.el.querySelectorAll("[data-speed]").forEach(b => b.classList.toggle("sel", b.dataset.speed === r.speed)); }
+function tilt(r, t) { fetch(r.base + "/tilt/" + t, { method: "POST" }).catch(() => {}); }
+function stopAll() { R.forEach(r => { r.held = []; setCmd(r, "stop"); }); }
+// keep repeating the command so the rover's safety stop doesn't kick in
+setInterval(() => R.forEach(r => {
+  if (r.cmd === "stop") return;
+  if (!canDrive(r.i)) setCmd(r, "stop"); else send(r, r.cmd);
+}), 150);
+
+// ---------- game requests ----------
+function post(path, body) {
+  return fetch(HOST + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    .then(r => r.json()).catch(() => ({ ok: false }));
+}
+function doFire(i) {
+  const p = gp(i), r = R[i];
+  if (!controls(i) || !G || G.mode !== "battle" || G.phase !== "play" || !p || p.hp <= 0) return;
+  const now = performance.now();
+  if (now - r.lastShot < (G.settings.SHOT_GAP_S || 0.45) * 1000) return;
+  if (p.ammo <= 0) { sfx.click(); addFx(i, { kind: "text", text: "RELOADING", color: "#ffc83d", dur: 700 }); return; }
+  r.lastShot = now;
+  p.ammo -= 1;                                   // show it right away; the host confirms
+  addFx(i, { kind: "laser", dur: 200 }); sfx.pew();
+  post("/game/action", { player: i, action: "fire" });
+}
+function doSpecial(i) {
+  if (!controls(i) || !G) return;
+  if (G.mode === "battle") post("/game/action", { player: i, action: "shield" });
+  else if (G.mode === "manhunt") post("/game/action", { player: i, action: i === G.manhunt.hunter ? "ping" : "jam" });
+}
+
+// ---------- keyboard ----------
+const KEYS = [
+  { drive: { KeyW: "forward", KeyA: "left", KeyS: "backward", KeyD: "right" }, fire: ["KeyE"], spec: ["KeyQ"],
+    speed: { Digit1: "slow", Digit2: "medium", Digit3: "fast" }, tilt: { KeyR: "up", KeyF: "down" } },
+  { drive: { ArrowUp: "forward", ArrowLeft: "left", ArrowDown: "backward", ArrowRight: "right" },
+    fire: ["Enter", "NumpadEnter", "Numpad0"], spec: ["ShiftRight", "Slash"],
+    speed: { Digit7: "slow", Digit8: "medium", Digit9: "fast", Numpad7: "slow", Numpad8: "medium", Numpad9: "fast" },
+    tilt: { PageUp: "up", PageDown: "down" } },
+];
+function keyTarget(k) {
+  if (ROLE === "both") return R[k] || null;
+  if (ROLE === "0" || ROLE === "1") return R[Number(ROLE)];
+  return null;
+}
+document.addEventListener("keydown", e => {
+  if (!ROLE || e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+  if (e.code === "Space") {
+    e.preventDefault();
+    if (ROLE === "both") stopAll(); else if (!e.repeat && keyTarget(0)) doFire(keyTarget(0).i);
+    return;
+  }
+  KEYS.forEach((ks, k) => {
+    const r = keyTarget(k); if (!r) return;
+    const c = ks.drive[e.code];
+    if (c) { e.preventDefault(); if (!r.held.includes(c)) r.held.push(c); setCmd(r, r.held[r.held.length - 1]); }
+    else if (ks.fire.includes(e.code)) { e.preventDefault(); if (!e.repeat) doFire(r.i); }
+    else if (ks.spec.includes(e.code) && !e.repeat) { doSpecial(r.i); }
+    else if (ks.speed[e.code] && !e.repeat) { setSpeed(r, ks.speed[e.code]); }
+    else if (ks.tilt[e.code]) { e.preventDefault(); tilt(r, ks.tilt[e.code]); }
+  });
+});
+document.addEventListener("keyup", e => {
+  KEYS.forEach((ks, k) => {
+    const r = keyTarget(k), c = ks.drive[e.code];
+    if (!r || !c) return;
+    r.held = r.held.filter(x => x !== c);
+    setCmd(r, r.held.length ? r.held[r.held.length - 1] : "stop");
+  });
+});
+window.addEventListener("blur", stopAll);
+document.addEventListener("visibilitychange", () => { if (document.hidden) stopAll(); });
+
+// ---------- polling ----------
+function pollRover(r) {
+  if (r.busy) return;
+  r.busy = true;
+  fetch(r.base + "/status?v=1").then(x => x.json()).then(s => {
+    const was = r.online;
+    r.online = true; r.name = s.name || r.name; r.color = s.color || r.color;
+    r.markers = s.markers || []; r.mseen = performance.now(); r.markerId = s.marker_id || r.markerId;
+    r.vision = s.vision || ""; r.tilt = !!s.tilt; r.speed = s.speed || r.speed;
+    if (r.el) {
+      r.el.style.setProperty("--c", r.color); $(".name", r.el).textContent = r.name;
+      $(".dot", r.el).classList.add("live"); $(".tilt", r.el).hidden = !r.tilt; showSpeed(r);
+      if (!was && !r.off.hidden) startStream(r);
+    }
+    if (r.joinBtn) {
+      r.joinBtn.style.setProperty("--c", r.color); $(".dot", r.joinBtn).classList.add("live");
+      $(".t", r.joinBtn).textContent = "Drive " + r.name;
+      $(".s", r.joinBtn).textContent = "This phone is the controller for " + r.name;
+    }
+  }).catch(() => {
+    r.online = false; r.markers = [];
+    if (r.el) $(".dot", r.el).classList.remove("live");
+    if (r.joinBtn) $(".dot", r.joinBtn).classList.remove("live");
+  }).finally(() => { r.busy = false; });
+}
+setInterval(() => R.forEach(r => { if (!ROLE || r.el) pollRover(r); }), 140);
+
+let gameBusy = false;
+function pollGame() {
+  if (gameBusy) return;
+  gameBusy = true;
+  fetch(HOST + "/game/state?since=" + (SEQ === null ? 1e12 : SEQ)).then(x => x.json()).then(s => {
+    const first = SEQ === null || s.seq < SEQ;
+    const prev = G;
+    G = s;
+    if (first) { SEQ = s.seq; syncBar(true); rebuildStrip(true); return; }
+    SEQ = s.seq;
+    s.events.forEach(onEvent);
+    if (!prev || prev.mode !== s.mode || prev.phase !== s.phase) syncBar(prev && prev.mode !== s.mode);
+    rebuildStrip(false);
+  }).catch(() => {}).finally(() => { gameBusy = false; });
+}
+setInterval(pollGame, 220);
+
+// ---------- top bar ----------
+function syncBar(modeChanged) {
+  const sel = $("#mode"), hider = $("#hider");
+  if (G && modeChanged && G.mode !== "free") sel.value = G.mode;
+  hider.innerHTML = "";
+  R.forEach(r => { const o = document.createElement("option"); o.value = r.i; o.textContent = r.name + " hides"; hider.appendChild(o); });
+  if (G && G.mode === "manhunt") hider.value = String(G.manhunt.ghost);
+  hider.hidden = sel.value !== "manhunt";
+  $("#stopg").hidden = !playing();
+  $("#start").textContent = playing() && G.phase !== "over" ? "Restart" : (G && G.phase === "over" ? "Play again" : "Start");
+  updateHint();
+}
+$("#mode").addEventListener("change", () => { $("#hider").hidden = $("#mode").value !== "manhunt"; $("#mode").blur(); });
+$("#start").onclick = () => {
+  sfx.unlock();
+  post("/game/start", { mode: $("#mode").value, rovers: LIST, options: { hider: Number($("#hider").value || 0) } });
+  $("#start").blur();
+};
+$("#stopg").onclick = () => { post("/game/stop", {}); $("#stopg").blur(); };
+$("#mute").onclick = () => { $("#mute").textContent = sfx.toggle() ? "Sound: on" : "Sound: off"; $("#mute").blur(); };
+$("#change").onclick = () => { stopAll(); ROLE = null; R.forEach(r => { if (r.el) r.img.src = ""; r.el = null; }); $("#arena").hidden = true; $("#join").hidden = false; };
+$("#lightbox").onclick = () => { $("#lightbox").hidden = true; };
+
+function updateHint() {
+  const h = $("#hint");
+  const mode = G ? G.mode : "free";
+  const tips = {
+    battle: "Put the crosshair on the other rover's marker and fire. Closer = 2 damage. Shield blocks hits for 3 s.",
+    manhunt: "The hider gets a head start, then sends the hunter a photo every minute. Get the hider's marker big in your camera for 1 s to catch them.",
+    treasure: "Find the printed treasure markers (10-19). Drive up until the camera locks on to claim one.",
+    free: "Pick a game and press Start. Markers the camera sees get a box around them, handy for testing.",
+  };
+  h.textContent = tips[mode] + (ROLE === "both" ? "  Space stops both rovers." : "");
+}
+
+function renderScore() {
+  const box = $("#score");
+  if (!G) { box.textContent = ""; return; }
+  const parts = [];
+  const ps = G.players || [];
+  const pill = (p, val) => `<span class="who"><i class="sw" style="background:${esc(p.color)}"></i>${esc(p.name)} <span class="mono">${val}</span></span>`;
+  if (G.mode === "battle" && ps.length) parts.push(pill(ps[0], ps[0].wins), `<span class="what">wins</span>`, ps[1] ? pill(ps[1], ps[1].wins) : "");
+  if (G.mode === "treasure" && ps.length) parts.push(pill(ps[0], ps[0].score), `<span class="what">treasure</span>`, ps[1] ? pill(ps[1], ps[1].score) : "");
+  if (G.mode === "manhunt" && ps.length > 1) {
+    const hu = ps[G.manhunt.hunter], gh = ps[G.manhunt.ghost];
+    parts.push(`<span class="what">${esc(hu.name)} hunts ${esc(gh.name)}</span>`);
+  }
+  let clock = "";
+  if (G.left !== null && G.phase !== "over") clock = fmt(G.left);
+  if (G.phase === "over") clock = "END";
+  box.innerHTML = `<span class="what">${esc(MODE_NAMES[G.mode] || "")}${G.mode === "manhunt" && G.phase === "hide" ? " · head start" : ""}</span>`
+    + (clock ? `<span class="clock mono">${clock}</span>` : "") + parts.join("");
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+// ---------- events from the host -> animations ----------
+function addFx(i, f) { const r = R[i]; if (!r || !r.el) return; f.t0 = performance.now(); r.fx.push(f); }
+function banner(i, text, color, dur = 1400) { addFx(i, { kind: "banner", text, color: color || "#fff", dur }); }
+function shake(i) { const r = R[i]; if (!r || !r.el) return; r.view.classList.remove("shake"); void r.view.offsetWidth; r.view.classList.add("shake"); }
+const anyVisible = (...is) => is.some(i => R[i] && R[i].el);
+const localShot = i => R[i] && performance.now() - R[i].lastShot < 900;
+
+function onEvent(e) {
+  const by = e.by, tg = e.target;
+  switch (e.type) {
+    case "start":
+      overInfo = null;
+      R.forEach(r => { r.fx = []; banner(r.i, MODE_NAMES[e.mode] || "", "#fff", 1300); });
+      break;
+    case "phase":
+      if (e.phase === "play") {
+        if (G.mode === "battle") R.forEach(r => banner(r.i, "FIGHT!", "#ff3b4e"));
+        if (G.mode === "treasure") R.forEach(r => banner(r.i, "GO!", "#ffc83d"));
+        if (G.mode === "manhunt") { banner(G.manhunt.hunter, "HUNT!", "#ff3b4e"); banner(G.manhunt.ghost, "RUN!", "#5ab8ff"); }
+        if (anyVisible(0, 1)) sfx.go();
+      }
+      if (e.phase === "hide") { banner(G.manhunt.ghost, "HIDE!", "#5ab8ff", 1800); if (anyVisible(0, 1)) sfx.go(); }
+      break;
+    case "miss":
+      if (!localShot(by)) { addFx(by, { kind: "laser", dur: 200 }); if (anyVisible(by)) sfx.pew(); }
+      addFx(by, { kind: "text", text: "MISS", color: "#aab", dur: 800 });
+      if (anyVisible(by)) sfx.miss();
+      break;
+    case "hit":
+      if (!localShot(by)) { addFx(by, { kind: "laser", dur: 200 }); }
+      addFx(by, { kind: "boom", x: e.x, y: e.y, w: e.w, big: e.dmg > 1, dur: 900 });
+      addFx(by, { kind: "text", text: (e.dmg > 1 ? "POINT BLANK! -" : "HIT -") + e.dmg, color: "#ffc83d", x: e.x, y: e.y - 0.08, dur: 1000 });
+      addFx(tg, { kind: "hurt", dur: 650 });
+      addFx(tg, { kind: "cracks", seed: Math.random(), dur: 1500 });
+      addFx(tg, { kind: "text", text: "-" + e.dmg, color: "#ff3b4e", dur: 900 });
+      shake(tg);
+      if (anyVisible(by)) sfx.boom(); else if (anyVisible(tg)) sfx.hurt();
+      if (navigator.vibrate && controls(tg) && ROLE !== "both") navigator.vibrate([80, 40, 120]);
+      break;
+    case "blocked":
+      if (!localShot(by)) addFx(by, { kind: "laser", dur: 200 });
+      addFx(by, { kind: "text", text: "BLOCKED", color: "#5ab8ff", x: e.x, y: e.y, dur: 900 });
+      addFx(tg, { kind: "ripple", dur: 600 });
+      if (anyVisible(by, tg)) sfx.shield();
+      break;
+    case "shield":
+      addFx(by, { kind: "ripple", dur: 700 }); if (anyVisible(by)) sfx.shield();
+      break;
+    case "reload": addFx(by, { kind: "text", text: "RELOADING", color: "#ffc83d", dur: 900 }); break;
+    case "reloaded": addFx(by, { kind: "text", text: "RELOADED", color: "#3ddc84", dur: 700 }); if (anyVisible(by)) sfx.beep(); break;
+    case "clue": onClue(e); break;
+    case "ping":
+      addFx(by, { kind: "text", text: "PING! extra photo coming", color: "#5ab8ff", dur: 1400 });
+      addFx(1 - by, { kind: "text", text: "THE HUNTER PINGED YOU", color: "#ff3b4e", dur: 1400 });
+      break;
+    case "jam":
+      addFx(by, { kind: "text", text: "JAMMER ARMED: next photo is scrambled", color: "#ffc83d", dur: 1600 });
+      break;
+    case "locking":
+      dismissClue(R[by]);                       // get the photo out of the way, you're close!
+      if (anyVisible(by)) sfx.beep();
+      break;
+    case "treasure":
+      addFx(by, { kind: "sparkle", x: e.x, y: e.y, w: e.w, dur: 1200 });
+      addFx(by, { kind: "text", text: "+1 TREASURE #" + e.id, color: "#ffc83d", x: e.x, y: e.y - 0.1, dur: 1300 });
+      R.forEach(r => { if (r.i !== by) addFx(r.i, { kind: "text", text: (gp(by) ? gp(by).name : "Rival") + " found #" + e.id, color: "#ffc83d", dur: 1300 }); });
+      if (anyVisible(by)) sfx.coin();
+      break;
+    case "over": gameOver(e); break;
+  }
+}
+
+function gameOver(e) {
+  overInfo = e;
+  const w = e.winner;
+  R.forEach(r => {
+    if (!r.el) return;
+    if (w === null || w === undefined) return;
+    if (r.i === w) addFx(r.i, { kind: "confetti", seed: Math.random(), dur: 3500 });
+  });
+  const mine = ROLE === "0" || ROLE === "1" ? Number(ROLE) : null;
+  if (mine !== null && w !== null && w !== undefined && mine !== w) sfx.lose(); else sfx.win();
+}
+function overText(i) {
+  if (!overInfo) return ["GAME OVER", "#fff"];
+  const w = overInfo.winner, why = overInfo.why;
+  if (w === null || w === undefined) return ["DRAW", "#fff"];
+  const won = i === w;
+  const T = {
+    ko: won ? ["VICTORY", "#3ddc84"] : ["DESTROYED", "#ff3b4e"],
+    time: won ? ["WINNER", "#3ddc84"] : ["OUT OF TIME", "#ff3b4e"],
+    caught: won ? ["CAUGHT 'EM!", "#3ddc84"] : ["YOU GOT CAUGHT", "#ff3b4e"],
+    escaped: won ? ["ESCAPED!", "#3ddc84"] : ["THEY GOT AWAY", "#ff3b4e"],
+    treasure: won ? ["TREASURE KING", "#ffc83d"] : ["SO CLOSE", "#ff3b4e"],
+  };
+  return T[why] || (won ? ["WINNER", "#3ddc84"] : ["GAME OVER", "#ff3b4e"]);
+}
+
+// ---------- Manhunt clue photos ----------
+function clueUrl(n) { return HOST + "/game/clue/" + n + ".jpg?g=" + (G ? G.seq : 0); }
+function onClue(e) {
+  const hunter = R[e.hunter], ghost = R[e.ghost];
+  if (hunter && hunter.el) {
+    dismissClue(hunter);
+    const card = document.createElement("div");
+    card.className = "polaroid";
+    let pic;
+    if (e.jammed || e.failed) {
+      pic = document.createElement("div"); pic.className = "pic jam";
+      pic.textContent = e.jammed ? "JAMMED!" : "NO SIGNAL";
+    } else {
+      pic = document.createElement("img"); pic.className = "pic"; pic.alt = "clue photo"; pic.src = clueUrl(e.n);
+    }
+    const cap = document.createElement("span");
+    cap.textContent = "Clue #" + e.n + (e.asked ? " (ping)" : "") + (e.jammed ? " - the hider jammed it" : e.failed ? " - camera didn't answer" : "");
+    card.append(pic, cap);
+    card.onclick = () => dismissClue(hunter);
+    hunter.card = card;
+    hunter.view.appendChild(card);
+    setTimeout(() => { if (hunter.card === card) dismissClue(hunter); }, 5500);
+    sfx.clue();
+  }
+  if (ghost && ghost.el) {
+    addFx(e.ghost, { kind: "flash", dur: 350 });
+    addFx(e.ghost, { kind: "text", text: e.jammed ? "SCRAMBLED PHOTO SENT" : "PHOTO SENT TO THE HUNTER", color: e.jammed ? "#ffc83d" : "#fff", dur: 1600 });
+    if (!(hunter && hunter.el)) sfx.shutter();
+  }
+}
+function dismissClue(r) {
+  const card = r && r.card;
+  if (!card) return;
+  r.card = null;
+  card.classList.add("out");
+  setTimeout(() => card.remove(), 500);       // it shrinks into the photo strip below
+}
+function rebuildStrip(force) {
+  R.forEach(r => { if (r.strip && (!G || G.mode !== "manhunt" || r.i !== G.manhunt.hunter)) r.strip.innerHTML = ""; });
+  if (!G || G.mode !== "manhunt") { lastCount = null; return; }
+  const hu = R[G.manhunt.hunter];
+  if (!hu || !hu.el) return;
+  const ready = G.manhunt.clues.filter(c => c.ready);
+  const key = ready.map(c => c.n).join(",");
+  if (!force && key === lastCount) return;
+  lastCount = key;
+  hu.strip.innerHTML = "";
+  ready.slice().reverse().forEach(c => {
+    const th = document.createElement("div");
+    th.className = "th" + (c.jammed || c.failed ? " jam" : "");
+    if (!(c.jammed || c.failed)) { const im = document.createElement("img"); im.src = clueUrl(c.n); im.alt = "clue " + c.n; th.appendChild(im); }
+    const s = document.createElement("span"); s.textContent = "#" + c.n; th.appendChild(s);
+    th.onclick = () => { if (c.jammed || c.failed) return; $("#lightbox img").src = clueUrl(c.n); $("#lightbox").hidden = false; };
+    hu.strip.appendChild(th);
+  });
+}
+
+// ---------- drawing ----------
+function contentRect(img, W, H) {
+  const nw = img.naturalWidth || 4, nh = img.naturalHeight || 3, s = Math.min(W / nw, H / nh);
+  const w = nw * s, h = nh * s;
+  return { x: (W - w) / 2, y: (H - h) / 2, w, h };
+}
+const noiseCv = document.createElement("canvas"); noiseCv.width = 96; noiseCv.height = 72;
+const noiseCtx = noiseCv.getContext("2d");
+function drawStatic(ctx, cr, alpha) {
+  const d = noiseCtx.createImageData(96, 72);
+  for (let k = 0; k < d.data.length; k += 4) { const v = Math.random() * 255; d.data[k] = d.data[k + 1] = d.data[k + 2] = v; d.data[k + 3] = 255; }
+  noiseCtx.putImageData(d, 0, 0);
+  ctx.save(); ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(noiseCv, cr.x, cr.y, cr.w, cr.h); ctx.restore();
+}
+function bigText(ctx, cr, text, color, scale = 1, yFrac = 0.5, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const size = Math.max(22, cr.w * 0.11) * scale;
+  ctx.font = `900 ${size}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineWidth = Math.max(3, size * 0.09); ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.lineJoin = "round";
+  const x = cr.x + cr.w / 2, y = cr.y + cr.h * yFrac;
+  ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y);
+  ctx.restore();
+}
+function smallText(ctx, x, y, text, color, size = 14, alpha = 1) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.font = `800 ${size}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const W = ctx.canvas.width / (window.devicePixelRatio || 1), half = ctx.measureText(text).width / 2 + 6;
+  x = half * 2 < W ? clamp(x, half, W - half) : W / 2;     // keep the words on screen
+  y = Math.max(size, y);
+  ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.strokeText(text, x, y);
+  ctx.fillStyle = color; ctx.fillText(text, x, y); ctx.restore();
+}
+function brackets(ctx, x, y, half, color, lw = 3, spin = 0) {
+  const L = half * 0.45;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(spin); ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = "round";
+  ctx.shadowColor = color; ctx.shadowBlur = 10;
+  [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+    ctx.beginPath(); ctx.moveTo(sx * half, sy * (half - L)); ctx.lineTo(sx * half, sy * half); ctx.lineTo(sx * (half - L), sy * half); ctx.stroke();
+  });
+  ctx.restore();
+}
+function freshMarkers(r) { return performance.now() - r.mseen < 700 ? r.markers : []; }
+function mpos(cr, m) { return { x: cr.x + m.x * cr.w, y: cr.y + m.y * cr.h, s: m.w * cr.w }; }
+
+function drawCrosshair(r, ctx, cr, t) {
+  const S = G.settings, foe = R[1 - r.i], foeId = gp(1 - r.i) ? gp(1 - r.i).marker_id : (foe ? foe.markerId : 0);
+  const cx = cr.x + cr.w / 2, cy = cr.y + cr.h / 2;
+  let state = "none", target = null;
+  freshMarkers(r).forEach(m => {
+    if (m.id !== foeId) return;
+    const inZone = Math.abs(m.x - 0.5) <= S.AIM_X && Math.abs(m.y - 0.5) <= S.AIM_Y;
+    const inRange = m.w >= S.MIN_W;
+    const st = inZone && inRange ? "locked" : inRange ? "seen" : "far";
+    if (!target || st === "locked") { target = m; state = st; }
+  });
+  // the target box around the other rover
+  if (target) {
+    const p = mpos(cr, target), half = Math.max(16, p.s * 0.9);
+    const col = state === "locked" ? "#ff3b4e" : state === "far" ? "#8a93a6" : "#ffc83d";
+    brackets(ctx, p.x, p.y, half + Math.sin(t / 120) * 3, col, 3, state === "locked" ? 0 : t / 900);
+    smallText(ctx, p.x, p.y - half - 12, (foe ? foe.name : "target") + (state === "far" ? " · out of range" : ""), col, 13);
+  }
+  // crosshair + aim zone
+  const locked = state === "locked";
+  const col = locked ? "#ff3b4e" : "rgba(255,255,255,.85)";
+  const ax = S.AIM_X * cr.w, ay = S.AIM_Y * cr.h;
+  ctx.save();
+  ctx.strokeStyle = locked ? "rgba(255,59,78,.55)" : "rgba(255,255,255,.22)"; ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]);
+  ctx.strokeRect(cx - ax, cy - ay, ax * 2, ay * 2); ctx.setLineDash([]);
+  const rad = Math.max(14, cr.w * 0.035) * (locked ? 1 + 0.12 * Math.sin(t / 70) : 1);
+  ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.shadowColor = col; ctx.shadowBlur = locked ? 14 : 4;
+  ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.stroke();
+  [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => {
+    ctx.beginPath(); ctx.moveTo(cx + dx * rad * 0.45, cy + dy * rad * 0.45); ctx.lineTo(cx + dx * rad * 1.7, cy + dy * rad * 1.7); ctx.stroke();
+  });
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  if (locked) smallText(ctx, cx, cy + rad * 2.3, "LOCKED - FIRE!", "#ff3b4e", 15, 0.75 + 0.25 * Math.sin(t / 90));
+}
+
+function drawHunterLock(r, ctx, cr, t) {
+  const ghost = R[G.manhunt.ghost], gid = gp(G.manhunt.ghost) ? gp(G.manhunt.ghost).marker_id : (ghost ? ghost.markerId : 0);
+  const prog = G.manhunt.catch || 0;
+  freshMarkers(r).forEach(m => {
+    if (m.id !== gid) return;
+    const p = mpos(cr, m), half = Math.max(18, p.s * 1.0), close = m.w >= G.settings.CATCH_W;
+    const col = close ? "#ff3b4e" : "#ffc83d";
+    brackets(ctx, p.x, p.y, half, col, 3, close ? 0 : t / 700);
+    ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.shadowColor = col; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(p.x, p.y, half * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke(); ctx.restore();
+    smallText(ctx, p.x, p.y - half * 1.35 - 14, close ? "CATCHING... " + Math.round(prog * 100) + "%" : "FOUND THEM! GET CLOSER", col, 14);
+  });
+  // radar sweep, just for looks
+  ctx.save(); ctx.globalAlpha = 0.07; ctx.fillStyle = "#3ddc84";
+  const y = cr.y + ((t / 12) % cr.h); ctx.fillRect(cr.x, y, cr.w, 3); ctx.restore();
+}
+
+function drawTreasure(r, ctx, cr, t) {
+  const ids = new Set(G.treasure.ids), claims = G.treasure.claims;
+  freshMarkers(r).forEach(m => {
+    if (!ids.has(m.id)) return;
+    const p = mpos(cr, m), half = Math.max(14, p.s * 0.8), owner = claims[String(m.id)];
+    if (owner === r.i) {
+      brackets(ctx, p.x, p.y, half, "#3ddc84", 2);
+      smallText(ctx, p.x, p.y + half + 12, "#" + m.id + " is yours", "#3ddc84", 12);
+    } else if (owner !== undefined) {
+      brackets(ctx, p.x, p.y, half, "#8a93a6", 2);
+      smallText(ctx, p.x, p.y + half + 12, "#" + m.id + " taken by " + (gp(owner) ? gp(owner).name : "?"), "#8a93a6", 12);
+    } else {
+      brackets(ctx, p.x, p.y, half + Math.sin(t / 100) * 4, "#ffc83d", 3, t / 600);
+      smallText(ctx, p.x, p.y - half - 12, "TREASURE #" + m.id + (m.w < 0.08 ? " · get closer" : ""), "#ffc83d", 13);
+    }
+  });
+}
+
+function drawAllMarkers(r, ctx, cr) {
+  freshMarkers(r).forEach(m => {
+    const p = mpos(cr, m), half = Math.max(12, p.s * 0.75);
+    brackets(ctx, p.x, p.y, half, "#5ab8ff", 2);
+    smallText(ctx, p.x, p.y - half - 10, "marker " + m.id + " · " + Math.round(m.w * 100) + "%", "#5ab8ff", 12);
+  });
+}
+
+// particles for explosions, sparkles and confetti
+function seeded(seed) { let s = Math.floor(seed * 2147483646) + 1; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+function drawFx(r, ctx, cr, now) {
+  r.fx = r.fx.filter(f => now - f.t0 < f.dur);
+  r.fx.forEach(f => {
+    const k = (now - f.t0) / f.dur;            // 0 -> 1
+    const cx = cr.x + cr.w / 2, cy = cr.y + cr.h / 2;
+    switch (f.kind) {
+      case "laser": {
+        const a = 1 - k, col = r.color;
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        [[0.12, 1.0], [0.88, 1.0]].forEach(([sx, sy]) => {
+          const x0 = cr.x + cr.w * sx, y0 = cr.y + cr.h * sy;
+          ctx.strokeStyle = col; ctx.globalAlpha = a; ctx.lineWidth = 10 * a + 2; ctx.shadowColor = col; ctx.shadowBlur = 25;
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(cx, cy); ctx.stroke();
+          ctx.strokeStyle = "#fff"; ctx.lineWidth = 3 * a + 0.5;
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(cx, cy); ctx.stroke();
+          ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x0, y0, 22 * a, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.restore();
+        break;
+      }
+      case "boom": {
+        const x = cr.x + f.x * cr.w, y = cr.y + f.y * cr.h, base = Math.max(40, f.w * cr.w * 2) * (f.big ? 1.5 : 1);
+        const rnd = seeded(f.t0 % 1 + 0.123);
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = Math.max(0, 1 - k * 1.6);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, base * (0.4 + k));
+        g.addColorStop(0, "#fff"); g.addColorStop(0.3, "#ffd23d"); g.addColorStop(0.7, "rgba(255,90,30,.6)"); g.addColorStop(1, "rgba(255,40,0,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, base * (0.4 + k), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1 - k;
+        ctx.strokeStyle = "#ffb03d"; ctx.lineWidth = 4 * (1 - k);
+        ctx.beginPath(); ctx.arc(x, y, base * (0.3 + k * 1.4), 0, Math.PI * 2); ctx.stroke();
+        for (let n = 0; n < 34; n++) {
+          const ang = rnd() * Math.PI * 2, sp = (0.4 + rnd()) * base * 1.6, d = sp * (1 - Math.pow(1 - k, 2));
+          ctx.fillStyle = rnd() < 0.5 ? "#ffd23d" : "#ff6a2a";
+          ctx.beginPath(); ctx.arc(x + Math.cos(ang) * d, y + Math.sin(ang) * d + k * k * 40, (1 - k) * (2 + rnd() * 4), 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+        break;
+      }
+      case "hurt": {
+        ctx.save();
+        const g = ctx.createRadialGradient(cx, cy, cr.w * 0.2, cx, cy, cr.w * 0.75);
+        g.addColorStop(0, "rgba(255,0,30,0)"); g.addColorStop(1, `rgba(255,0,30,${0.75 * (1 - k)})`);
+        ctx.fillStyle = g; ctx.fillRect(cr.x, cr.y, cr.w, cr.h);
+        if (k < 0.15) { ctx.fillStyle = `rgba(255,255,255,${0.35 * (1 - k / 0.15)})`; ctx.fillRect(cr.x, cr.y, cr.w, cr.h); }
+        ctx.restore();
+        break;
+      }
+      case "cracks": {
+        const rnd = seeded(f.seed), ox = cr.x + cr.w * (0.25 + rnd() * 0.5), oy = cr.y + cr.h * (0.25 + rnd() * 0.5);
+        ctx.save(); ctx.globalAlpha = Math.min(1, (1 - k) * 1.5); ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 1.6;
+        ctx.shadowColor = "#000"; ctx.shadowBlur = 3;
+        for (let n = 0; n < 9; n++) {
+          let x = ox, y = oy, ang = rnd() * Math.PI * 2;
+          ctx.beginPath(); ctx.moveTo(x, y);
+          for (let s = 0; s < 6; s++) { ang += (rnd() - 0.5) * 0.9; const len = cr.w * (0.03 + rnd() * 0.06); x += Math.cos(ang) * len; y += Math.sin(ang) * len; ctx.lineTo(x, y); }
+          ctx.stroke();
+        }
+        ctx.restore();
+        break;
+      }
+      case "ripple": {
+        ctx.save(); ctx.strokeStyle = "#5ab8ff"; ctx.globalAlpha = 1 - k; ctx.lineWidth = 6; ctx.shadowColor = "#5ab8ff"; ctx.shadowBlur = 20;
+        ctx.beginPath(); ctx.ellipse(cx, cy, cr.w * (0.2 + 0.4 * k), cr.h * (0.2 + 0.4 * k), 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+        break;
+      }
+      case "flash": {
+        ctx.save(); ctx.fillStyle = `rgba(255,255,255,${0.9 * (1 - k)})`; ctx.fillRect(cr.x, cr.y, cr.w, cr.h); ctx.restore();
+        break;
+      }
+      case "text": {
+        const x = f.x !== undefined ? cr.x + f.x * cr.w : cx;
+        const y0 = f.y !== undefined ? cr.y + clamp(f.y, 0.08, 0.92) * cr.h : cy + cr.h * 0.18;
+        smallText(ctx, x, y0 - k * cr.h * 0.08, f.text, f.color || "#fff", Math.max(15, cr.w * 0.035), Math.min(1, (1 - k) * 2.5));
+        break;
+      }
+      case "banner": {
+        const s = k < 0.18 ? 0.4 + (k / 0.18) * 0.75 : k < 0.28 ? 1.15 - (k - 0.18) : 1.05;
+        bigText(ctx, cr, f.text, f.color, s, 0.42, k > 0.75 ? (1 - k) / 0.25 : 1);
+        break;
+      }
+      case "sparkle": {
+        const x = cr.x + f.x * cr.w, y = cr.y + f.y * cr.h, rad = Math.max(30, f.w * cr.w * 1.5);
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 1 - k;
+        for (let n = 0; n < 12; n++) {
+          const ang = n / 12 * Math.PI * 2 + k, d = rad * (0.3 + k);
+          star(ctx, x + Math.cos(ang) * d, y + Math.sin(ang) * d, 7 * (1 - k) + 2, "#ffd23d");
+        }
+        ctx.restore();
+        break;
+      }
+      case "confetti": {
+        const rnd = seeded(f.seed), cols = ["#ff3b4e", "#ffc83d", "#3ddc84", "#5ab8ff", "#fff", r.color];
+        ctx.save(); ctx.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
+        for (let n = 0; n < 110; n++) {
+          const x = cr.x + rnd() * cr.w + Math.sin(k * 12 + n) * 12, sp = 0.5 + rnd(), y = cr.y - 20 + (k * sp * 1.4 + rnd() * 0.3) * cr.h;
+          ctx.fillStyle = cols[n % cols.length];
+          ctx.save(); ctx.translate(x, y); ctx.rotate(k * 10 * sp + n); ctx.fillRect(-4, -2.5, 8, 5); ctx.restore();
+        }
+        ctx.restore();
+        break;
+      }
+    }
+  });
+}
+function star(ctx, x, y, s, col) {
+  ctx.fillStyle = col; ctx.beginPath();
+  for (let n = 0; n < 8; n++) { const a = n * Math.PI / 4, rr = n % 2 ? s * 0.35 : s; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  ctx.closePath(); ctx.fill();
+}
+
+// ---------- HUD (the text and bars over the video) ----------
+function hpBar(p, max) {
+  const lvl = p.hp <= max * 0.3 ? " crit" : p.hp <= max * 0.6 ? " lo" : "";
+  let s = `<div class="hp${lvl}">`;
+  for (let k = 0; k < max; k++) s += `<i class="${k < p.hp ? "" : "gone"}"></i>`;
+  return s + "</div>";
+}
+function setHud(r, tl, tr, bl, br) {
+  const h = r.hud, key = tl + "|" + tr + "|" + bl + "|" + br;
+  if (h.key === key) return;
+  h.key = key; h.tl.innerHTML = tl; h.tr.innerHTML = tr; h.bl.innerHTML = bl; h.br.innerHTML = br;
+}
+function updateHud(r) {
+  const p = gp(r.i);
+  let tl = `<span class="tag" style="color:${esc(r.color)}">${esc(r.name)}</span>`, tr = "", bl = "", br = "";
+  const role = $(".role", r.el);
+  if (r.vision && r.vision !== "ok" && r.vision !== "idle" && r.vision !== "starting") {
+    br = `<span class="tag warn">${r.vision === "no-opencv" ? "Camera targeting off: OpenCV not installed" : "Camera targeting: " + esc(r.vision)}</span>`;
+  }
+  if (!G || !p || G.mode === "free" || G.phase === "idle") {
+    role.textContent = controls(r.i) ? "YOU" : "";
+    setHud(r, tl, tr, bl, br);
+    return;
+  }
+  if (G.left !== null && G.phase !== "over") tr = `<span class="tag mono big">${fmt(G.left)}</span>`;
+  if (G.mode === "battle") {
+    role.textContent = "HP " + p.hp + " · ammo " + p.ammo;
+    tl += hpBar(p, G.settings.HP);
+    if (p.reload > 0) bl = `<span class="tag warn">RELOADING</span><div class="bar"><b style="width:${100 * (1 - p.reload / G.settings.RELOAD_S)}%"></b></div>`;
+    else { bl = '<div class="ammo">'; for (let k = 0; k < G.settings.AMMO; k++) bl += `<i class="${k < p.ammo ? "" : "gone"}"></i>`; bl += "</div>"; }
+    const sh = p.shield > 0 ? `<span class="tag icebg">SHIELD ON ${p.shield.toFixed(1)}</span>`
+      : p.shield_cd > 0 ? `<span class="tag">shield in ${Math.ceil(p.shield_cd)}s</span>` : `<span class="tag" style="color:#5ab8ff">SHIELD READY</span>`;
+    br = sh + br;
+  } else if (G.mode === "manhunt") {
+    const hunter = r.i === G.manhunt.hunter, m = G.manhunt;
+    role.textContent = hunter ? "HUNTER" : "HIDER";
+    tl += `<span class="tag ${hunter ? "hotbg" : "icebg"}">${hunter ? "HUNTER" : "HIDER"}</span>`;
+    if (G.phase === "hide") tr = `<span class="tag mono big">${hunter ? "blindfolded " : "hide! "}${fmt(G.left)}</span>`;
+    if (G.phase === "play" && m.next_clue !== null) tr += `<span class="tag mono">${hunter ? "next clue" : "next photo"} ${fmt(m.next_clue)}</span>`;
+    bl = hunter ? `<span class="tag">pings left: ${m.pings}</span>` : `<span class="tag">jammers left: ${m.jams}${m.jam_armed ? " (armed)" : ""}</span>`;
+  } else if (G.mode === "treasure") {
+    role.textContent = "treasure: " + p.score;
+    tl += `<span class="tag" style="color:#ffc83d">TREASURE ${p.score}</span>`;
+    const left = G.treasure.ids.length - Object.keys(G.treasure.claims).length;
+    bl = `<span class="tag">${left} still hidden</span>`;
+  }
+  setHud(r, tl, tr, bl, br);
+}
+function updateButtons(r) {
+  if (!controls(r.i)) return;
+  const p = gp(r.i), b = r.fireBtn, s = r.specBtn;
+  const battle = G && G.mode === "battle", hunt = G && G.mode === "manhunt";
+  b.hidden = !battle;
+  b.disabled = !(battle && G.phase === "play" && p && p.hp > 0 && p.ammo > 0);
+  s.hidden = !(battle || hunt);
+  if (battle) { s.textContent = "SHIELD"; s.disabled = !(G.phase === "play" && p && p.shield_cd <= 0); }
+  if (hunt) {
+    const hunter = r.i === G.manhunt.hunter;
+    s.textContent = hunter ? "PING (" + G.manhunt.pings + ")" : "JAM (" + G.manhunt.jams + ")";
+    s.disabled = hunter ? !(G.phase === "play" && G.manhunt.pings > 0) : !((G.phase === "play" || G.phase === "hide") && G.manhunt.jams > 0);
+  }
+}
+
+// ---------- the animation loop ----------
+let lastTick = null, hudT = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const doHud = now - hudT > 90;
+  if (doHud) { hudT = now; renderScore(); }
+  if (G && G.phase === "countdown") {
+    const n = Math.ceil(G.left || 0);
+    if (n !== lastTick && n > 0) { lastTick = n; sfx.tick(); }
+  } else lastTick = null;
+  R.forEach(r => {
+    if (!r.el) return;
+    const v = r.view, W = v.clientWidth, H = v.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (r.cv.width !== Math.round(W * dpr) || r.cv.height !== Math.round(H * dpr)) { r.cv.width = Math.round(W * dpr); r.cv.height = Math.round(H * dpr); }
+    const ctx = r.ctx;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const cr = contentRect(r.img, W, H);
+    if (G) {
+      const blind = G.mode === "manhunt" && G.phase === "hide" && G.manhunt.hunter === r.i;
+      if (blind) {
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+        drawStatic(ctx, cr, 0.35);
+        bigText(ctx, cr, "BLINDFOLDED", "#ff3b4e", 0.75, 0.42);
+        bigText(ctx, cr, fmt(G.left || 0), "#fff", 0.9, 0.6);
+      } else if (G.mode === "battle" && (G.phase === "play" || G.phase === "countdown")) {
+        drawCrosshair(r, ctx, cr, now);
+        const p = gp(r.i);
+        if (p && p.shield > 0) {
+          ctx.save(); ctx.strokeStyle = "#5ab8ff"; ctx.lineWidth = 8; ctx.globalAlpha = 0.5 + 0.25 * Math.sin(now / 90);
+          ctx.shadowColor = "#5ab8ff"; ctx.shadowBlur = 30; ctx.strokeRect(cr.x + 4, cr.y + 4, cr.w - 8, cr.h - 8); ctx.restore();
+        }
+      } else if (G.mode === "manhunt" && G.phase === "play" && G.manhunt.hunter === r.i) {
+        drawHunterLock(r, ctx, cr, now);
+      } else if (G.mode === "treasure" && G.phase === "play") {
+        drawTreasure(r, ctx, cr, now);
+      } else if (G.mode === "free" || G.phase === "idle") {
+        drawAllMarkers(r, ctx, cr);
+      }
+      if (G.phase === "countdown") bigText(ctx, cr, String(Math.max(1, Math.ceil(G.left || 0))), "#fff", 1.8, 0.5);
+    }
+    drawFx(r, ctx, cr, now);
+    if (G && G.phase === "over") {
+      ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(cr.x, cr.y, cr.w, cr.h);
+      const [txt, col] = overText(r.i);
+      bigText(ctx, cr, txt, col, 1, 0.45);
+      smallText(ctx, cr.x + cr.w / 2, cr.y + cr.h * 0.62, "Press Play again for a rematch", "#ddd", Math.max(13, cr.w * 0.028));
+    }
+    if (doHud) { updateHud(r); updateButtons(r); }
+  });
+}
+
+buildJoin();
+requestAnimationFrame(frame);
+R.forEach(pollRover);
+pollGame();
+</script>
+</body></html>

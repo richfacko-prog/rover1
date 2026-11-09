@@ -1,0 +1,8 @@
+[Unit]
+Description=Pull rover code updates from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash __REPO__/pi/update.sh

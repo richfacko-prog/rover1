@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0d12">
+<link rel="icon" href="data:,">
+<title>Face Cam</title>
+<style>
+:root { --bg:#0b0d12; --panel:#151922; --line:#2a3140; --ink:#eef2f8; --dim:#8a93a6;
+        --ok:#3ddc84; --gold:#ffc83d; --hot:#ff3b4e; }
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+html, body { margin:0; background:var(--bg); color:var(--ink);
+  font-family:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color:transparent; }
+button { font:inherit; color:inherit; border:0; cursor:pointer; }
+a { color:#8cf; }
+
+header { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--line);
+  background:#0e1118; flex-wrap:wrap; }
+header h1 { margin:0; font-size:18px; letter-spacing:.08em; font-weight:900; }
+header .who { color:var(--dim); font-size:14px; }
+header nav { margin-left:auto; display:flex; gap:14px; font-size:14px; }
+
+main { max-width:1100px; margin:0 auto; padding:16px; display:grid; gap:20px; }
+.live { display:grid; grid-template-columns:minmax(0, 1fr) 280px; gap:16px; align-items:start; }
+@media (max-width:820px) { .live { grid-template-columns:1fr; } }
+
+.view { position:relative; aspect-ratio:4/3; background:#000; border-radius:14px; overflow:hidden; border:2px solid var(--line); }
+.view.on { border-color:var(--ok); }
+.view img, .view canvas { position:absolute; inset:0; width:100%; height:100%; }
+.view img { object-fit:contain; }
+.view .off { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--dim); text-align:center; padding:16px; }
+.flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+.flash.go { animation:flash .6s ease-out; }
+@keyframes flash { 0% { opacity:.95; } 100% { opacity:0; } }
+.pill { position:absolute; left:12px; top:12px; padding:6px 12px; border-radius:999px; font-size:14px; font-weight:800;
+  background:rgba(0,0,0,.6); backdrop-filter:blur(4px); display:flex; align-items:center; gap:8px; }
+.pill i { width:10px; height:10px; border-radius:50%; background:#666; }
+.pill.watching i { background:var(--ok); box-shadow:0 0 8px var(--ok); animation:pulse 1.6s infinite; }
+.pill.spotted i, .pill.snapping i { background:var(--gold); box-shadow:0 0 8px var(--gold); }
+.pill.cooldown i, .pill.waiting i { background:#5ab8ff; }
+@keyframes pulse { 50% { opacity:.35; } }
+
+.side { display:flex; flex-direction:column; gap:12px; }
+.big { height:64px; border-radius:14px; font-size:19px; font-weight:900; letter-spacing:.03em; background:var(--ok); color:#06210f; }
+.big.stop { background:#3a1d22; color:#ffd3d8; border:1px solid #6b2b35; }
+.snap { height:48px; border-radius:12px; background:var(--panel); border:1px solid var(--line); font-weight:800; font-size:16px; }
+.snap:disabled { opacity:.5; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; font-size:14px; color:var(--dim); line-height:1.45; }
+.card b { color:var(--ink); }
+.stat { display:flex; justify-content:space-between; color:var(--ink); font-weight:700; }
+.warn { color:var(--gold); }
+
+.gallery-head { display:flex; align-items:baseline; gap:12px; }
+.gallery-head h2 { margin:0; font-size:18px; }
+.gallery-head span { color:var(--dim); font-size:14px; }
+.gallery-head button { margin-left:auto; background:none; color:var(--dim); font-size:13px; text-decoration:underline; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+.th { position:relative; aspect-ratio:3/4; border-radius:10px; overflow:hidden; background:#000; cursor:pointer; border:2px solid transparent; }
+.th:hover { border-color:var(--ok); }
+.th img { width:100%; height:100%; object-fit:cover; display:block; }
+.th span { position:absolute; left:0; right:0; bottom:0; padding:16px 8px 6px; font-size:12px; font-weight:700;
+  background:linear-gradient(transparent, rgba(0,0,0,.75)); }
+.th.new { animation:pop .5s cubic-bezier(.2,1.5,.4,1); }
+@keyframes pop { from { transform:scale(.4); opacity:0; } }
+.empty { color:var(--dim); padding:24px; text-align:center; border:1px dashed var(--line); border-radius:12px; }
+
+#box { position:fixed; inset:0; background:rgba(0,0,0,.92); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:16px; z-index:9; }
+#box img { max-width:100%; max-height:calc(100vh - 120px); border-radius:8px; }
+#box .bar { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+#box .bar button, #box .bar a { height:40px; padding:0 14px; border-radius:10px; background:var(--panel); border:1px solid var(--line);
+  display:inline-flex; align-items:center; font-size:14px; font-weight:700; color:var(--ink); text-decoration:none; }
+#box .bar .sel { background:var(--ok); color:#06210f; border-color:transparent; }
+#box .bar .del { background:#3a1d22; border-color:#6b2b35; }
+#box .when { color:var(--dim); font-size:14px; }
+</style></head>
+<body>
+<header>
+  <h1>FACE CAM</h1>
+  <span class="who" id="who"></span>
+  <nav><a href="/">Drive</a><a href="/arena">Arena games</a></nav>
+</header>
+
+<main>
+  <section class="live">
+    <div class="view" id="view">
+      <img id="cam" alt="live camera">
+      <div class="off" id="off">connecting...</div>
+      <canvas id="cv"></canvas>
+      <div class="flash" id="flash"></div>
+      <div class="pill" id="pill"><i></i><span id="status">...</span></div>
+    </div>
+    <div class="side">
+      <button class="big" id="watch">Start watching</button>
+      <button class="snap" id="snap">Snap a photo now</button>
+      <div class="card">
+        <div class="stat"><span>Photos taken</span><span id="count">0</span></div>
+      </div>
+      <div class="card" id="tips">
+        <b>Tips.</b> Park the rover facing where people walk or sit. It works best on faces looking
+        toward it, in good light, up to about 3–4 m away. It takes one photo per person, then waits
+        for someone new. Each photo also gets a zoomed-in close-up of the face.
+      </div>
+      <div class="card warn" id="warn" hidden></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="gallery-head"><h2>Photos</h2><span id="sub"></span><button id="clear" hidden>Delete all</button></div>
+    <div class="grid" id="grid" style="margin-top:12px"></div>
+  </section>
+</main>
+
+<div id="box" hidden>
+  <img id="boxImg" alt="photo">
+  <div class="when" id="boxWhen"></div>
+  <div class="bar">
+    <button id="prev">&#9664;</button>
+    <button id="showFace">Close-up</button>
+    <button id="showFull">Whole picture</button>
+    <a id="dl" download>Download</a>
+    <button class="del" id="del">Delete</button>
+    <button id="next">&#9654;</button>
+    <button id="close">Close</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const TEXT = {
+  off: "Not watching. Press Start.",
+  watching: "Watching for faces...",
+  spotted: "Face spotted! Hold still...",
+  snapping: "Snap!",
+  cooldown: "Got it! Ready again in a moment",
+  waiting: "Already got you. Waiting for someone new...",
+  "no-opencv": "OpenCV isn't installed yet",
+  "no-detector": "Face detector file missing",
+  "no-camera": "No camera picture",
+};
+let S = null, seq = null, shown = [], boxIdx = -1, boxFace = true, busy = false;
+
+// ---------- live camera ----------
+const cam = $("#cam"), off = $("#off");
+function startStream() { cam.src = "/stream.mjpg?t=" + Date.now(); }
+cam.onload = () => { off.hidden = true; };
+cam.onerror = () => { off.hidden = false; off.textContent = "No camera picture. Retrying..."; setTimeout(startStream, 3000); };
+startStream();
+
+// ---------- sound: a little camera shutter, made on the fly ----------
+let ac = null;
+function shutter() {
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const n = ac.sampleRate * 0.12, b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3) * (i < n * 0.3 || i > n * 0.5 ? 1 : 0.2);
+    const s = ac.createBufferSource(), g = ac.createGain(); s.buffer = b; g.gain.value = 0.4;
+    s.connect(g).connect(ac.destination); s.start();
+  } catch (e) {}
+}
+document.addEventListener("pointerdown", () => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch (e) {} }, { once: true });
+
+// ---------- talking to the rover ----------
+function post(path, body) {
+  return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
+    .then(r => r.json()).catch(() => ({ ok: false }));
+}
+$("#watch").onclick = () => { if (S) post("/facecam/watch", { on: !S.watching }).then(poll); };
+$("#snap").onclick = () => {
+  const b = $("#snap"); b.disabled = true; b.textContent = "Snapping...";
+  post("/facecam/snap").then(() => { b.disabled = false; b.textContent = "Snap a photo now"; poll(); });
+};
+$("#clear").onclick = () => {
+  if (confirm("Delete all " + (S ? S.count : "") + " photos? This can't be undone.")) post("/facecam/delete_all").then(poll);
+};
+
+function poll() {
+  if (busy) return;
+  busy = true;
+  fetch("/facecam/state").then(r => r.json()).then(s => {
+    const firstLoad = S === null;
+    S = s;
+    $("#who").textContent = s.name;
+    document.title = "Face Cam · " + s.name;
+    $("#status").textContent = s.status === "cooldown" ? "Got it! Ready again in " + Math.ceil(s.cooldown) + "s" : (TEXT[s.status] || s.status);
+    $("#pill").className = "pill " + s.status;
+    $("#view").classList.toggle("on", s.watching);
+    const w = $("#watch");
+    w.textContent = s.watching ? "Stop watching" : "Start watching";
+    w.classList.toggle("stop", s.watching);
+    $("#count").textContent = s.count;
+    const warn = $("#warn");
+    if (!s.opencv) { warn.hidden = false; warn.innerHTML = "<b>OpenCV isn't installed on this rover yet.</b> The rover's updater installs it by itself within a few minutes, or run <code>sudo apt install -y python3-opencv</code> and restart robot-drive."; }
+    else if (!s.detector) { warn.hidden = false; warn.textContent = "The face detector file (models/lbpcascade_frontalface.xml) is missing."; }
+    else warn.hidden = true;
+    if (seq !== null && s.seq > seq) { const f = $("#flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); shutter(); }
+    seq = s.seq;
+    renderGallery(s.photos, firstLoad);
+  }).catch(() => { $("#status").textContent = "Can't reach the rover"; $("#pill").className = "pill"; })
+    .finally(() => { busy = false; });
+}
+setInterval(poll, 250);
+poll();
+
+// ---------- face boxes over the live view ----------
+const cv = $("#cv"), ctx = cv.getContext("2d");
+function draw(t) {
+  requestAnimationFrame(draw);
+  const W = cv.clientWidth, H = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (!S || !S.faces.length) return;
+  const nw = cam.naturalWidth || 4, nh = cam.naturalHeight || 3, sc = Math.min(W / nw, H / nh);
+  const rw = nw * sc, rh = nh * sc, ox = (W - rw) / 2, oy = (H - rh) / 2;
+  const col = S.status === "spotted" || S.status === "snapping" ? "#ffc83d" : S.watching ? "#3ddc84" : "#5ab8ff";
+  S.faces.forEach(f => {
+    const x = ox + f.x * rw, y = oy + f.y * rh, w = f.w * rw, h = f.h * rh;
+    const pad = Math.max(4, w * 0.15) + (S.status === "spotted" ? Math.sin(t / 120) * 3 : 0);
+    const L = Math.max(8, w * 0.3);
+    ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.shadowColor = col; ctx.shadowBlur = 10;
+    [[x - pad, y - pad, 1, 1], [x + w + pad, y - pad, -1, 1], [x + w + pad, y + h + pad, -1, -1], [x - pad, y + h + pad, 1, -1]].forEach(([cx, cy, sx, sy]) => {
+      ctx.beginPath(); ctx.moveTo(cx + sx * L, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + sy * L); ctx.stroke();
+    });
+    ctx.restore();
+  });
+}
+requestAnimationFrame(draw);
+
+// ---------- gallery ----------
+function when(name) {
+  const m = name.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+  if (!m) return name;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+const url = (p, face) => "/facecam/photos/" + (face && p.face ? p.name.replace(/\.jpg$/, "_face.jpg") : p.name);
+function renderGallery(photos, firstLoad) {
+  const key = photos.map(p => p.name).join("|");
+  if (key === shown.map(p => p.name).join("|")) return;
+  const old = new Set(shown.map(p => p.name));
+  shown = photos;
+  $("#sub").textContent = S.count > photos.length ? "newest " + photos.length + " of " + S.count : "";
+  $("#clear").hidden = !photos.length;
+  const grid = $("#grid");
+  grid.innerHTML = "";
+  if (!photos.length) {
+    grid.innerHTML = '<div class="empty">No photos yet. Press <b>Start watching</b> and walk in front of the rover.</div>';
+    return;
+  }
+  photos.forEach((p, i) => {
+    const d = document.createElement("div");
+    d.className = "th" + (!firstLoad && !old.has(p.name) ? " new" : "");
+    const im = document.createElement("img"); im.loading = "lazy"; im.alt = "photo"; im.src = url(p, true);
+    const s = document.createElement("span"); s.textContent = when(p.name);
+    d.append(im, s);
+    d.onclick = () => openBox(i);
+    grid.appendChild(d);
+  });
+  if (boxIdx >= 0) boxIdx = Math.min(boxIdx, photos.length - 1);
+}
+
+// ---------- big view ----------
+function openBox(i) { boxIdx = i; boxFace = shown[i].face; showBox(); $("#box").hidden = false; }
+function showBox() {
+  const p = shown[boxIdx];
+  if (!p) { $("#box").hidden = true; boxIdx = -1; return; }
+  $("#boxImg").src = url(p, boxFace);
+  $("#boxWhen").textContent = when(p.name) + (p.face ? "" : " · no close-up (no face found)");
+  $("#showFace").hidden = !p.face;
+  $("#showFace").classList.toggle("sel", boxFace && p.face);
+  $("#showFull").classList.toggle("sel", !boxFace || !p.face);
+  const dl = $("#dl"); dl.href = url(p, boxFace); dl.download = (boxFace && p.face ? p.name.replace(/\.jpg$/, "_face.jpg") : p.name);
+}
+$("#showFace").onclick = () => { boxFace = true; showBox(); };
+$("#showFull").onclick = () => { boxFace = false; showBox(); };
+$("#prev").onclick = () => { if (boxIdx > 0) { boxIdx--; showBox(); } };
+$("#next").onclick = () => { if (boxIdx < shown.length - 1) { boxIdx++; showBox(); } };
+$("#close").onclick = () => { $("#box").hidden = true; boxIdx = -1; };
+$("#box").addEventListener("click", e => { if (e.target.id === "box") $("#close").onclick(); });
+$("#del").onclick = () => {
+  const p = shown[boxIdx];
+  if (p && confirm("Delete this photo?")) post("/facecam/delete", { name: p.name }).then(() => { shown = []; poll(); });
+};
+document.addEventListener("keydown", e => {
+  if ($("#box").hidden) return;
+  if (e.key === "Escape") $("#close").onclick();
+  if (e.key === "ArrowLeft") $("#prev").onclick();
+  if (e.key === "ArrowRight") $("#next").onclick();
+});
+</script>
+</body></html>
