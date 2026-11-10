@@ -58,6 +58,21 @@ Anyone can choose the game and press **Start**. Everyone sees the same game, bec
 - Press Start. Drive up to a treasure until the camera locks on (gold box) to claim it.
 - Each treasure counts once, first come first served. Most treasure after 5 minutes wins.
 
+### Capture the Flag
+- **Set up:** print the two **base markers** (20 and 21) from the markers page. Base 20 is
+  Rover 1's base, base 21 is Rover 2's. Tape them to a wall or box at camera height, at
+  opposite ends of the house (or room).
+- **Grab:** drive up to the OTHER rover's base until your camera locks on (a ring fills up
+  in about 1 second). Now you're carrying their flag: your screen glows gold.
+- **Score:** bring it home. Lock on to YOUR OWN base the same way. First to **3 flags** wins.
+  After 5 minutes, more flags wins.
+- **TAG** (the camera "laser", nothing real): put the crosshair on the other rover's marker
+  and press TAG (E / Enter on the PC). The tagged rover is **frozen for 3 seconds** and, if
+  it was carrying your flag, the flag goes straight back to your base. After a freeze you
+  can't be tagged again for 2 seconds, and you can tag once every 1.5 seconds.
+- Tip: one player can stay home and guard, or both can race for flags. Defending is easier
+  if you park near your base facing the way the other rover will come in.
+
 ## Changing the rules
 
 Put an `ARENA` section in Rover 1's `~/rover.json` with only what you want to change, then
@@ -66,6 +81,9 @@ Put an `ARENA` section in Rover 1's `~/rover.json` with only what you want to ch
 ```json
 {"NAME": "Rover 1", "ARENA": {"HP": 15, "HIDE_S": 60, "CLUE_EVERY_S": 45, "HUNT_S": 900}}
 ```
+
+Capture the Flag settings: `CTF_CAPS` (flags to win), `CTF_S` (round length), `FREEZE_S`,
+`TAG_GAP_S`, `BASE_W` (how close to a base you need to get).
 
 All settings, with what they do, are at the top of `arena.py` (`SETTINGS`).
 `MARKER_ID` in `rover.json` changes which marker a rover wears (normally 1 for the first rover
@@ -77,6 +95,7 @@ in `FLEET`, 2 for the second).
 |---|---|
 | Yellow note "Camera targeting off: OpenCV not installed" | Wait a few minutes for the update, or run `sudo apt install -y python3-opencv` and restart robot-drive. |
 | Marker not detected | More light; no glare on shiny paper; marker flat and not too small; the whole marker including its white border in view. Test in Free drive. |
+| Base won't lock on | Get closer (the base needs to fill about a tenth of the picture), more light, keep it flat. You can only grab the OTHER base, and only score at your own base while carrying. |
 | Hits don't count | The crosshair zone is the dashed box in the middle. The marker has to be inside it and close enough that the label doesn't say "out of range". |
 | Phone can't open `richardfacko.local` | Some Android phones don't understand `.local` names. Use the Pi's number instead, e.g. `http://192.168.2.159:8000/arena`. Tip: `hostname -I` on the Pi. |
 | The two phones see different games | Both must use the same rover list. The game always runs on the first rover in the list. |

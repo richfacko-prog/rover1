@@ -9,6 +9,9 @@ The camera looks for the OTHER rover's marker, and everything in the games comes
                  photo clue to the hunter. Get close enough to see the hider's marker for
                  1 second to catch it.
   Treasure Hunt  find printed treasure markers (IDs 10-19) hidden around the house.
+  Capture the Flag  each rover has a printed base marker (20, 21). Lock on to the other
+                 rover's base to grab its flag, then lock on to your own base to score.
+                 TAG (the camera "laser") freezes the other rover; a tagged carrier drops the flag.
 
 The page is http://<rover>.local:8000/arena. Play on one PC (split screen, keyboard)
 or on two phones (one per player). The FIRST rover in the list runs the game (the "host"),
@@ -74,12 +77,22 @@ SETTINGS = {
     "TREASURE_FIRST": 10,
     "TREASURE_COUNT": 10,    # IDs 10..19
     "TREASURE_W": 0.08,
+    # Capture the Flag
+    "CTF_S": 300,            # round length; if time runs out, more captures wins
+    "CTF_CAPS": 3,           # captures needed to win
+    "BASE_FIRST": 20,        # base marker IDs: 20 = first rover's base, 21 = second rover's
+    "BASE_W": 0.10,          # base marker this big in the camera = close enough
+    "BASE_HOLD_S": 1.0,      # ...for this long to grab / score
+    "FREEZE_S": 3.0,         # a tagged rover can't drive for this long
+    "SAFE_S": 2.0,           # ...and can't be tagged again for this long after that
+    "TAG_GAP_S": 1.5,        # fastest you can tag
     # camera
     "DETECT_FPS": 8,
 }
 SETTINGS.update(CFG.get("ARENA") or {})
 S = SETTINGS
 TREASURE_IDS = set(range(S["TREASURE_FIRST"], S["TREASURE_FIRST"] + S["TREASURE_COUNT"]))
+BASE_IDS = [S["BASE_FIRST"], S["BASE_FIRST"] + 1]
 
 
 def my_marker_id():
@@ -190,7 +203,9 @@ def new_player(slot, host):
     return {"slot": slot, "host": host, "name": host.split(".")[0], "color": "#888",
             "online": False, "marker_id": slot + 1, "markers": [], "seen": 0.0,
             "hp": S["HP"], "ammo": S["AMMO"], "reload_at": 0.0, "last_shot": 0.0,
-            "shield_until": 0.0, "shield_ready": 0.0, "wins": 0, "score": 0}
+            "shield_until": 0.0, "shield_ready": 0.0, "wins": 0, "score": 0,
+            "carrying": False, "frozen_until": 0.0, "safe_until": 0.0, "last_tag": 0.0,
+            "lock_since": None, "lock_seen": 0.0, "lock": 0.0}
 
 
 class Game:
@@ -277,7 +292,7 @@ class Game:
         with self.lock:
             if hosts:
                 self.set_rovers(hosts)
-            if mode not in ("free", "battle", "manhunt", "treasure"):
+            if mode not in ("free", "battle", "manhunt", "treasure", "ctf"):
                 raise ValueError("unknown game")
             same = mode == self.mode
             self.mode = mode
@@ -285,7 +300,8 @@ class Game:
             self.clues = []
             for p in self.players:
                 p.update(hp=S["HP"], ammo=S["AMMO"], reload_at=0.0, shield_until=0.0,
-                         shield_ready=0.0, score=0)
+                         shield_ready=0.0, score=0, carrying=False, frozen_until=0.0,
+                         safe_until=0.0, last_tag=0.0, lock_since=None, lock=0.0)
                 if not same:
                     p["wins"] = 0
             if mode == "manhunt":
@@ -315,6 +331,8 @@ class Game:
                 return self.ping(slot)
             if self.mode == "manhunt" and what == "jam":
                 return self.jam(slot)
+            if self.mode == "ctf" and what == "fire":
+                return self.tag(slot)
             return {"ok": False, "why": "not in this game"}
 
     def fire(self, slot):
@@ -360,6 +378,36 @@ class Game:
         p["shield_ready"] = now + S["SHIELD_COOLDOWN_S"]
         self.event("shield", by=slot)
         return {"ok": True}
+
+    def tag(self, slot):
+        """Capture the Flag: the camera 'laser'. Freezes the other rover; a carrier drops the flag."""
+        p, foe = self.players[slot], self.other(slot)
+        now = time.monotonic()
+        if self.phase != "play" or foe is None or now < p["frozen_until"]:
+            return {"ok": False}
+        if now - p["last_tag"] < S["TAG_GAP_S"]:
+            return {"ok": False, "why": "too fast"}
+        p["last_tag"] = now
+        self.lock.release()                         # fresh look through the tagger's camera
+        try:
+            self.read_status(p, timeout=0.35)
+        finally:
+            self.lock.acquire()
+        m = self.sees(p, foe["marker_id"], S["MIN_W"])
+        on_target = m and abs(m["x"] - 0.5) <= S["AIM_X"] and abs(m["y"] - 0.5) <= S["AIM_Y"]
+        if not on_target:
+            self.event("miss", by=slot)
+            return {"ok": True, "hit": False}
+        if now < foe["safe_until"]:
+            self.event("blocked", by=slot, target=foe["slot"], x=m["x"], y=m["y"], w=m["w"])
+            return {"ok": True, "hit": False, "blocked": True}
+        foe["frozen_until"] = now + S["FREEZE_S"]
+        foe["safe_until"] = now + S["FREEZE_S"] + S["SAFE_S"]
+        foe["lock_since"], foe["lock"] = None, 0.0
+        dropped = foe["carrying"]
+        foe["carrying"] = False
+        self.event("tag", by=slot, target=foe["slot"], x=m["x"], y=m["y"], w=m["w"], dropped=dropped)
+        return {"ok": True, "hit": True, "dropped": dropped}
 
     def ping(self, slot):
         if slot != self.hunter or self.phase != "play" or self.pings <= 0:
@@ -436,6 +484,8 @@ class Game:
                 self.set_phase("hide", S["HIDE_S"])
             elif self.mode == "battle":
                 self.set_phase("play", S["BATTLE_S"])
+            elif self.mode == "ctf":
+                self.set_phase("play", S["CTF_S"])
             else:
                 self.set_phase("play", S["TREASURE_S"])
             return
@@ -449,6 +499,8 @@ class Game:
                 self.finish(None if a["hp"] == b["hp"] else (0 if a["hp"] > b["hp"] else 1), "time")
         elif self.mode == "manhunt":
             self.tick_manhunt(now, left)
+        elif self.mode == "ctf" and self.phase == "play":
+            self.tick_ctf(now, left)
         elif self.mode == "treasure" and self.phase == "play":
             for p in self.players:
                 for tid in sorted(TREASURE_IDS - set(self.claims)):
@@ -494,6 +546,36 @@ class Game:
             ghost["score"] += 1
             self.finish(ghost["slot"], "escaped")
 
+    def tick_ctf(self, now, left):
+        for p in self.players:
+            if now < p["frozen_until"]:
+                continue
+            # not carrying: go for the OTHER base. Carrying: bring it home to your own base.
+            base = BASE_IDS[p["slot"]] if p["carrying"] else BASE_IDS[1 - p["slot"]]
+            if self.sees(p, base, S["BASE_W"]):
+                p["lock_seen"] = now
+                if p["lock_since"] is None:
+                    p["lock_since"] = now
+            elif p["lock_since"] is not None and now - p["lock_seen"] > 0.35:
+                p["lock_since"] = None
+            p["lock"] = 0.0 if p["lock_since"] is None else \
+                min(1.0, (now - p["lock_since"]) / S["BASE_HOLD_S"])
+            if p["lock"] >= 1.0:
+                p["lock_since"], p["lock"] = None, 0.0
+                if not p["carrying"]:
+                    p["carrying"] = True
+                    self.event("grab", by=p["slot"])
+                else:
+                    p["carrying"] = False
+                    p["score"] += 1
+                    self.event("capture", by=p["slot"], score=p["score"])
+                    if p["score"] >= S["CTF_CAPS"]:
+                        self.finish(p["slot"], "flags")
+                        return
+        if left == 0 and len(self.players) == 2:
+            a, b = self.players
+            self.finish(None if a["score"] == b["score"] else (0 if a["score"] > b["score"] else 1), "time")
+
     # ----- what every page polls -----
     def snapshot(self, since):
         with self.lock:
@@ -506,7 +588,11 @@ class Game:
                     "ammo": p["ammo"], "reload": round(max(0.0, p["reload_at"] - now), 2) if p["ammo"] == 0 else 0,
                     "shield": round(max(0.0, p["shield_until"] - now), 2),
                     "shield_cd": round(max(0.0, p["shield_ready"] - now), 2),
-                    "wins": p["wins"], "score": p["score"]})
+                    "wins": p["wins"], "score": p["score"],
+                    "carrying": p["carrying"], "lock": round(p["lock"], 2),
+                    "frozen": round(max(0.0, p["frozen_until"] - now), 2),
+                    "safe": round(max(0.0, p["safe_until"] - now), 2),
+                    "tag_cd": round(max(0.0, p["last_tag"] + S["TAG_GAP_S"] - now), 2)})
             left = self.left()
             out = {
                 "seq": self.seq, "mode": self.mode, "phase": self.phase,
@@ -514,7 +600,8 @@ class Game:
                 "winner": self.winner, "players": players,
                 "settings": {k: S[k] for k in ("HP", "AMMO", "RELOAD_S", "SHOT_GAP_S", "SHIELD_S", "SHIELD_COOLDOWN_S",
                                                "AIM_X", "AIM_Y", "MIN_W", "CATCH_W", "CLUE_EVERY_S",
-                                               "HIDE_S", "HUNT_S")},
+                                               "HIDE_S", "HUNT_S", "CTF_CAPS", "BASE_W", "FREEZE_S",
+                                               "TAG_GAP_S")},
                 "manhunt": {
                     "hunter": self.hunter, "ghost": 1 - self.hunter,
                     "clues": [{"n": c["n"], "jammed": c["jammed"], "failed": c["failed"],
@@ -524,6 +611,7 @@ class Game:
                     else round(max(0.0, self.next_clue - now), 1),
                     "pings": self.pings, "jams": self.jams, "jam_armed": self.jam_armed,
                     "catch": round(self.catch_progress, 2)},
+                "ctf": {"bases": BASE_IDS},
                 "treasure": {"ids": sorted(TREASURE_IDS),
                              "claims": {str(k): v for k, v in self.claims.items()}},
                 "events": [e for e in self.events if e["seq"] > since],
@@ -562,6 +650,10 @@ def markers_page():
         for i, h in [(k + 1, CFG['FLEET'][k] if k < len(CFG['FLEET']) else '') for k in range(2)])
     treasure = "".join(f"<div class='card small'><img src='/markers/{i}.png'><b>Treasure {i}</b></div>"
                        for i in sorted(TREASURE_IDS))
+    bases = "".join(
+        f"<div class=card><img src='/markers/{b}.png'><b>Base {b}</b>"
+        f"<span>Capture the Flag: Rover {k + 1}'s base. Tape it to a wall or box at camera height</span></div>"
+        for k, b in enumerate(BASE_IDS))
     return f"""<!doctype html><html><head><meta charset=utf-8><title>Arena markers</title><style>
 body{{font-family:sans-serif;margin:16px;color:#111}} h1{{font-size:20px}} p{{max-width:700px}}
 .grid{{display:flex;flex-wrap:wrap;gap:16px}} .card{{display:flex;flex-direction:column;align-items:center;
@@ -574,6 +666,7 @@ border:1px dashed #999;padding:8px;width:9cm;page-break-inside:avoid}} .card img
 Treasure markers: hide them around the house, standing up at camera height.</p>
 <button onclick="print()">Print</button>
 <h2>Rovers</h2><div class=grid>{rovers}</div>
+<h2>Capture the Flag bases (IDs {BASE_IDS[0]} and {BASE_IDS[1]})</h2><div class=grid>{bases}</div>
 <h2>Treasure Hunt (IDs {min(TREASURE_IDS)}-{max(TREASURE_IDS)})</h2><div class=grid>{treasure}</div>
 </body></html>"""
 

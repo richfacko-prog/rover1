@@ -161,7 +161,7 @@ body.phone .polaroid span { font-size:12px; bottom:6px; }
 
 <section id="join">
   <h1>ROBOT ARENA</h1>
-  <p>Laser battles, Manhunt and treasure hunts, all seen through your rovers' cameras.
+  <p>Laser battles, Manhunt, treasure hunts and Capture the Flag, all seen through your rovers' cameras.
      How are you playing?</p>
   <div class="choices" id="choices"></div>
   <small>Each rover needs its printed marker &middot; <a href="/markers" target="_blank">print markers</a>
@@ -175,6 +175,7 @@ body.phone .polaroid span { font-size:12px; bottom:6px; }
       <option value="battle">Laser Battle</option>
       <option value="manhunt">Manhunt</option>
       <option value="treasure">Treasure Hunt</option>
+      <option value="ctf">Capture the Flag</option>
       <option value="free">Free drive</option>
     </select>
     <select id="hider" aria-label="Who hides" hidden></select>
@@ -232,7 +233,7 @@ body.phone .polaroid span { font-size:12px; bottom:6px; }
 "use strict";
 const DEFAULT_LIST = __DEFAULT_LIST__;
 const PORT = __PORT__;
-const MODE_NAMES = { battle: "Laser Battle", manhunt: "Manhunt", treasure: "Treasure Hunt", free: "Free drive" };
+const MODE_NAMES = { battle: "Laser Battle", manhunt: "Manhunt", treasure: "Treasure Hunt", ctf: "Capture the Flag", free: "Free drive" };
 const COLORS = ["#22aa77", "#3b82f6"];
 
 // ---------- which rovers ----------
@@ -392,6 +393,7 @@ function canDrive(i) {
   if (!controls(i)) return false;
   if (G && G.phase === "countdown") return false;
   if (G && G.mode === "manhunt" && G.phase === "hide" && G.manhunt.hunter === i) return false;  // blindfolded
+  if (G && G.mode === "ctf" && G.phase === "play" && gp(i) && gp(i).frozen > 0) return false;     // tagged
   return true;
 }
 function send(r, c) { fetch(r.base + "/drive/" + c, { method: "POST" }).catch(() => {}); }
@@ -416,7 +418,17 @@ function post(path, body) {
   return fetch(HOST + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
     .then(r => r.json()).catch(() => ({ ok: false }));
 }
+function doTag(i) {
+  const p = gp(i), r = R[i];
+  if (!controls(i) || !G || G.phase !== "play" || !p || p.frozen > 0) return;
+  const now = performance.now();
+  if (now - r.lastShot < (G.settings.TAG_GAP_S || 1.5) * 1000) { sfx.click(); return; }
+  r.lastShot = now;
+  addFx(i, { kind: "laser", dur: 200 }); sfx.pew();
+  post("/game/action", { player: i, action: "fire" });
+}
 function doFire(i) {
+  if (G && G.mode === "ctf") return doTag(i);
   const p = gp(i), r = R[i];
   if (!controls(i) || !G || G.mode !== "battle" || G.phase !== "play" || !p || p.hp <= 0) return;
   const now = performance.now();
@@ -549,6 +561,7 @@ function updateHint() {
     battle: "Put the crosshair on the other rover's marker and fire. Closer = 2 damage. Shield blocks hits for 3 s.",
     manhunt: "The hider gets a head start, then sends the hunter a photo every minute. Get the hider's marker big in your camera for 1 s to catch them.",
     treasure: "Find the printed treasure markers (10-19). Drive up until the camera locks on to claim one.",
+    ctf: "Lock on to the other rover's base marker to grab its flag, then lock on to your own base to score. TAG freezes the other rover for 3 s and makes a carrier drop your flag.",
     free: "Pick a game and press Start. Markers the camera sees get a box around them, handy for testing.",
   };
   h.textContent = tips[mode] + (ROLE === "both" ? "  Space stops both rovers." : "");
@@ -562,6 +575,7 @@ function renderScore() {
   const pill = (p, val) => `<span class="who"><i class="sw" style="background:${esc(p.color)}"></i>${esc(p.name)} <span class="mono">${val}</span></span>`;
   if (G.mode === "battle" && ps.length) parts.push(pill(ps[0], ps[0].wins), `<span class="what">wins</span>`, ps[1] ? pill(ps[1], ps[1].wins) : "");
   if (G.mode === "treasure" && ps.length) parts.push(pill(ps[0], ps[0].score), `<span class="what">treasure</span>`, ps[1] ? pill(ps[1], ps[1].score) : "");
+  if (G.mode === "ctf" && ps.length) parts.push(pill(ps[0], ps[0].score), `<span class="what">flags</span>`, ps[1] ? pill(ps[1], ps[1].score) : "");
   if (G.mode === "manhunt" && ps.length > 1) {
     const hu = ps[G.manhunt.hunter], gh = ps[G.manhunt.ghost];
     parts.push(`<span class="what">${esc(hu.name)} hunts ${esc(gh.name)}</span>`);
@@ -592,6 +606,7 @@ function onEvent(e) {
       if (e.phase === "play") {
         if (G.mode === "battle") R.forEach(r => banner(r.i, "FIGHT!", "#ff3b4e"));
         if (G.mode === "treasure") R.forEach(r => banner(r.i, "GO!", "#ffc83d"));
+        if (G.mode === "ctf") R.forEach(r => banner(r.i, "GET THEIR FLAG!", "#ffc83d"));
         if (G.mode === "manhunt") { banner(G.manhunt.hunter, "HUNT!", "#ff3b4e"); banner(G.manhunt.ghost, "RUN!", "#5ab8ff"); }
         if (anyVisible(0, 1)) sfx.go();
       }
@@ -642,6 +657,27 @@ function onEvent(e) {
       R.forEach(r => { if (r.i !== by) addFx(r.i, { kind: "text", text: (gp(by) ? gp(by).name : "Rival") + " found #" + e.id, color: "#ffc83d", dur: 1300 }); });
       if (anyVisible(by)) sfx.coin();
       break;
+    case "tag":
+      addFx(by, { kind: "boom", x: e.x, y: e.y, w: e.w, big: false, dur: 800 });
+      addFx(by, { kind: "text", text: e.dropped ? "TAGGED! FLAG RETURNED" : "TAGGED! FROZEN", color: "#5ab8ff", x: e.x, y: e.y - 0.08, dur: 1200 });
+      addFx(tg, { kind: "hurt", dur: 650 });
+      if (e.dropped) addFx(tg, { kind: "text", text: "YOU DROPPED THE FLAG", color: "#ff3b4e", dur: 1600 });
+      shake(tg);
+      if (anyVisible(by)) sfx.boom(); else if (anyVisible(tg)) sfx.hurt();
+      if (navigator.vibrate && controls(tg) && ROLE !== "both") navigator.vibrate([80, 40, 120]);
+      break;
+    case "grab":
+      banner(by, "GOT THE FLAG!", "#ffc83d", 1300);
+      addFx(by, { kind: "text", text: "Now bring it to YOUR base", color: "#fff", dur: 1800 });
+      R.forEach(r => { if (r.i !== by) addFx(r.i, { kind: "text", text: (gp(by) ? gp(by).name : "Rival") + " STOLE YOUR FLAG! Tag them!", color: "#ff3b4e", dur: 1800 }); });
+      if (anyVisible(by)) sfx.coin(); else if (anyVisible(0, 1)) sfx.hurt();
+      break;
+    case "capture":
+      addFx(by, { kind: "confetti", seed: Math.random(), dur: 1800 });
+      banner(by, "CAPTURED! " + e.score + "/" + G.settings.CTF_CAPS, "#3ddc84", 1500);
+      R.forEach(r => { if (r.i !== by) addFx(r.i, { kind: "text", text: (gp(by) ? gp(by).name : "Rival") + " scored a flag", color: "#ff3b4e", dur: 1500 }); });
+      if (anyVisible(0, 1)) sfx.win();
+      break;
     case "over": gameOver(e); break;
   }
 }
@@ -668,6 +704,7 @@ function overText(i) {
     caught: won ? ["CAUGHT 'EM!", "#3ddc84"] : ["YOU GOT CAUGHT", "#ff3b4e"],
     escaped: won ? ["ESCAPED!", "#3ddc84"] : ["THEY GOT AWAY", "#ff3b4e"],
     treasure: won ? ["TREASURE KING", "#ffc83d"] : ["SO CLOSE", "#ff3b4e"],
+    flags: won ? ["FLAG MASTER", "#3ddc84"] : ["FLAGS LOST", "#ff3b4e"],
   };
   return T[why] || (won ? ["WINNER", "#3ddc84"] : ["GAME OVER", "#ff3b4e"]);
 }
@@ -777,7 +814,7 @@ function brackets(ctx, x, y, half, color, lw = 3, spin = 0) {
 function freshMarkers(r) { return performance.now() - r.mseen < 700 ? r.markers : []; }
 function mpos(cr, m) { return { x: cr.x + m.x * cr.w, y: cr.y + m.y * cr.h, s: m.w * cr.w }; }
 
-function drawCrosshair(r, ctx, cr, t) {
+function drawCrosshair(r, ctx, cr, t, label = "LOCKED - FIRE!") {
   const S = G.settings, foe = R[1 - r.i], foeId = gp(1 - r.i) ? gp(1 - r.i).marker_id : (foe ? foe.markerId : 0);
   const cx = cr.x + cr.w / 2, cy = cr.y + cr.h / 2;
   let state = "none", target = null;
@@ -810,7 +847,7 @@ function drawCrosshair(r, ctx, cr, t) {
   });
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  if (locked) smallText(ctx, cx, cy + rad * 2.3, "LOCKED - FIRE!", "#ff3b4e", 15, 0.75 + 0.25 * Math.sin(t / 90));
+  if (locked) smallText(ctx, cx, cy + rad * 2.3, label, "#ff3b4e", 15, 0.75 + 0.25 * Math.sin(t / 90));
 }
 
 function drawHunterLock(r, ctx, cr, t) {
@@ -828,6 +865,36 @@ function drawHunterLock(r, ctx, cr, t) {
   // radar sweep, just for looks
   ctx.save(); ctx.globalAlpha = 0.07; ctx.fillStyle = "#3ddc84";
   const y = cr.y + ((t / 12) % cr.h); ctx.fillRect(cr.x, y, cr.w, 3); ctx.restore();
+}
+
+function drawCtf(r, ctx, cr, t) {
+  const p = gp(r.i), bases = G.ctf.bases, mine = bases[r.i], theirs = bases[1 - r.i];
+  const goal = p && p.carrying ? mine : theirs;
+  freshMarkers(r).forEach(m => {
+    if (m.id !== mine && m.id !== theirs) return;
+    const pt = mpos(cr, m), half = Math.max(16, pt.s * 0.9);
+    if (m.id !== goal) {
+      brackets(ctx, pt.x, pt.y, half, "#8a93a6", 2);
+      smallText(ctx, pt.x, pt.y - half - 12, m.id === mine ? "your base" : "their base", "#8a93a6", 12);
+      return;
+    }
+    const close = m.w >= G.settings.BASE_W, col = close ? "#3ddc84" : "#ffc83d", prog = (p && p.lock) || 0;
+    brackets(ctx, pt.x, pt.y, half + (close ? 0 : Math.sin(t / 100) * 4), col, 3, close ? 0 : t / 700);
+    ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 5; ctx.shadowColor = col; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, half * 1.35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog); ctx.stroke(); ctx.restore();
+    const what = p && p.carrying ? "SCORING" : "GRABBING FLAG";
+    smallText(ctx, pt.x, pt.y - half * 1.35 - 14, close ? what + "... " + Math.round(prog * 100) + "%" : (p && p.carrying ? "HOME BASE · get closer" : "THEIR FLAG · get closer"), col, 14);
+  });
+  drawCrosshair(r, ctx, cr, t, "LOCKED - TAG!");
+  if (p && p.frozen > 0) {
+    drawStatic(ctx, cr, 0.3);
+    ctx.save(); ctx.fillStyle = "rgba(90,184,255,.25)"; ctx.fillRect(cr.x, cr.y, cr.w, cr.h); ctx.restore();
+    bigText(ctx, cr, "FROZEN", "#5ab8ff", 0.9, 0.42);
+    bigText(ctx, cr, p.frozen.toFixed(1), "#fff", 0.7, 0.58);
+  } else if (p && p.carrying) {
+    ctx.save(); ctx.strokeStyle = "#ffc83d"; ctx.lineWidth = 6; ctx.globalAlpha = 0.45 + 0.25 * Math.sin(t / 120);
+    ctx.shadowColor = "#ffc83d"; ctx.shadowBlur = 25; ctx.strokeRect(cr.x + 3, cr.y + 3, cr.w - 6, cr.h - 6); ctx.restore();
+  }
 }
 
 function drawTreasure(r, ctx, cr, t) {
@@ -1014,15 +1081,25 @@ function updateHud(r) {
     tl += `<span class="tag" style="color:#ffc83d">TREASURE ${p.score}</span>`;
     const left = G.treasure.ids.length - Object.keys(G.treasure.claims).length;
     bl = `<span class="tag">${left} still hidden</span>`;
+  } else if (G.mode === "ctf") {
+    const foe = gp(1 - r.i);
+    role.textContent = "flags " + p.score + "/" + G.settings.CTF_CAPS;
+    tl += `<span class="tag" style="color:#ffc83d">FLAGS ${p.score}/${G.settings.CTF_CAPS}</span>`;
+    if (p.carrying) tl += `<span class="tag" style="background:#ffc83d;color:#221a00;text-shadow:none">&#9873; YOU HAVE THEIR FLAG: GO HOME!</span>`;
+    bl = p.frozen > 0 ? `<span class="tag icebg">FROZEN ${p.frozen.toFixed(1)}</span>`
+      : p.tag_cd > 0 ? `<span class="tag">tag in ${p.tag_cd.toFixed(1)}s</span>` : `<span class="tag" style="color:#5ab8ff">TAG READY</span>`;
+    if (foe && foe.carrying) br = `<span class="tag hotbg">&#9873; THEY HAVE YOUR FLAG! TAG THEM</span>` + br;
   }
   setHud(r, tl, tr, bl, br);
 }
 function updateButtons(r) {
   if (!controls(r.i)) return;
   const p = gp(r.i), b = r.fireBtn, s = r.specBtn;
-  const battle = G && G.mode === "battle", hunt = G && G.mode === "manhunt";
-  b.hidden = !battle;
-  b.disabled = !(battle && G.phase === "play" && p && p.hp > 0 && p.ammo > 0);
+  const battle = G && G.mode === "battle", hunt = G && G.mode === "manhunt", ctf = G && G.mode === "ctf";
+  b.hidden = !(battle || ctf);
+  b.textContent = ctf ? "TAG" : "FIRE";
+  b.disabled = ctf ? !(G.phase === "play" && p && p.frozen <= 0)
+    : !(battle && G.phase === "play" && p && p.hp > 0 && p.ammo > 0);
   s.hidden = !(battle || hunt);
   if (battle) { s.textContent = "SHIELD"; s.disabled = !(G.phase === "play" && p && p.shield_cd <= 0); }
   if (hunt) {
@@ -1068,6 +1145,8 @@ function frame(now) {
         drawHunterLock(r, ctx, cr, now);
       } else if (G.mode === "treasure" && G.phase === "play") {
         drawTreasure(r, ctx, cr, now);
+      } else if (G.mode === "ctf" && G.phase === "play") {
+        drawCtf(r, ctx, cr, now);
       } else if (G.mode === "free" || G.phase === "idle") {
         drawAllMarkers(r, ctx, cr);
       }
