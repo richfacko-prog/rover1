@@ -30,8 +30,9 @@ MOTOR_H = 18.8               # motor thickness
 MOTOR_OUT_Y = W / 2          # outer face of motor flush with deck edge
 WALL_T = 3.0
 WALL_X = (50.0, 74.0)        # short locating wall beside the gearbox only, so any TT motor is longer than it
-ZIP_X = (42.0, 60.0)         # two zip ties around each motor (the outer one also wraps the wall)
+ZIP_X = (42.0, 60.0)         # two zip ties around each motor (the outer one goes through a gap in the wall)
 NOTCH_W, NOTCH_D = 5.5, 2.0   # edge notch that locates the zip tie
+WALL_GAP = 6.5               # gap in the motor wall where the zip tie passes through
 
 # ---- electronics ----
 L298N_C, L298N_PITCH = (48.0, 0.0), 37.0
@@ -73,13 +74,21 @@ def lower_deck():
     plate = extrude(notched_outline(), holes, 0, LOWER_T, "z")
 
     bodies = [plate]
-    # motor mounting walls hang below the deck, on the inboard side of each motor
+    # motor mounting walls hang below the deck, on the inboard side of each motor.
+    # Each wall has a gap where a zip tie crosses it, so the tie drops straight down past it.
+    spans, a = [], WALL_X[0]
+    for zx in sorted(ZIP_X):
+        if WALL_X[0] < zx < WALL_X[1]:
+            spans.append((a, zx - WALL_GAP / 2))
+            a = zx + WALL_GAP / 2
+    spans.append((a, WALL_X[1]))
     for sx in (1, -1):
         for sy in (1, -1):
-            x0, x1 = sorted((sx * WALL_X[0], sx * WALL_X[1]))
-            outline = rect(x0, -MOTOR_H, x1, 0.6)                     # (x, z)
-            y0, y1 = sorted((sy * inner_y, sy * (inner_y + WALL_T)))
-            bodies.append(extrude(outline, [], y0, y1, "y"))
+            for w0, w1 in spans:
+                x0, x1 = sorted((sx * w0, sx * w1))
+                outline = rect(x0, -MOTOR_H, x1, 0.6)                 # (x, z)
+                y0, y1 = sorted((sy * inner_y, sy * (inner_y + WALL_T)))
+                bodies.append(extrude(outline, [], y0, y1, "y"))
     return bodies
 
 

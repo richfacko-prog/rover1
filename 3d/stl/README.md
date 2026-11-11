@@ -47,7 +47,7 @@ Older / spare files (you don't need these for a new build):
    middle of the rover. Stick a strip of foam tape on top of the motor to hold it in place.
 2. **Zip ties (2 per motor, no bolts needed).** For each tie: go down through the small slot on the inner
    side, under the motor, up the outer side through the notch in the deck edge, and back over the top.
-   The tie nearest the axle also wraps around the wall. Pull both ties tight.
+   The tie nearest the axle drops through the gap in the printed wall. Pull both ties tight.
 3. **Wires.** Feed each motor's wires up through the round hole next to it.
 4. **L298N.** Mount it at the front of the lower deck on spacers, heatsink up.
 5. **Battery holder.** Stick it at the back of the lower deck with Velcro so you can swap batteries.
