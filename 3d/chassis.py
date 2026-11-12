@@ -1,6 +1,7 @@
 """
-4WD two-deck rover chassis for: Raspberry Pi 4, L298N, 6xAA holder,
-~222 g USB power bank, HC-SR04, 4x TT gear motors with 65 mm wheels.
+4WD two-deck rover chassis for: Raspberry Pi 4, L298N, one 2S 7.4 V battery (70 x 37 x 19 mm)
+with a 5 V converter for the Pi, DaierTek KCD1 rocker switch, battery gauge, HC-SR04,
+4x TT gear motors with 65 mm wheels. Every part is screwed or zip-tied down.
 
 Frame: X = forward, Y = left, Z = up. Units: mm.
 All key dimensions are parameters below.
@@ -29,30 +30,59 @@ MOTOR_W = 22.5               # gearbox width along the axle
 MOTOR_H = 18.8               # motor thickness
 MOTOR_OUT_Y = W / 2          # outer face of motor flush with deck edge
 WALL_T = 3.0
-WALL_X = (50.0, 74.0)        # short locating wall beside the gearbox only, so any TT motor is longer than it
-ZIP_X = (42.0, 60.0)         # two zip ties around each motor (the outer one goes through a gap in the wall)
-NOTCH_W, NOTCH_D = 5.5, 2.0   # edge notch that locates the zip tie
-WALL_GAP = 6.5               # gap in the motor wall where the zip tie passes through
+WALL_X = (22.0, 90.0)        # inner wall along the WHOLE motor (motor end to gearbox end)
+OUTER_X = (22.0, 44.0)       # outer wall at the motor end (stays clear of the wheel)
+TAB_X = (20.0, 46.0)         # deck widened here to carry the outer wall
+TAB_Y = MOTOR_OUT_Y + 0.3 + WALL_T   # 58.3: outer edge of that tab
+ZIP_X = (31.0, 64.0)         # zip ties: one round the motor body, one round the gearbox
+NOTCH_W, NOTCH_D = 5.5, 2.0  # edge notch that locates the zip tie
+WALL_GAP = 6.5               # gap in the walls where a zip tie passes
 
 # ---- electronics ----
 L298N_C, L298N_PITCH = (48.0, 0.0), 37.0
 PI_HOLES_X = (-74.5, -16.5)  # Pi 4: 58 x 49 mm hole pattern, ports face the rear
 PI_HOLES_Y = (-24.5, 24.5)
 SENSOR_HOLES = [(90.0, 15.0), (90.0, -15.0)]
+BATT = (-94.0, -22.0, -19.5, 19.5)       # 2S pack 70 x 37 (+ clearance), at the back
+BATT_TIES = (-80.0, -50.0)               # two zip ties (or a 10 mm Velcro strap) across the pack
+BUCK_TIES = (-30.0, -16.0)               # 5 V converter, right of centre (x -12..12, y -37..-9)
+WAGO_TIES = (15.0, 27.0)                 # two Wago 221-413, left of centre (x -12..12, y 9..33)
+TIE_X = 15.5                             # those ties pass either side of the part
+BRACKET_X = (-60.5, -34.5)               # switch bracket (left side) and gauge bracket (right side)
+BRACKET_HOLES = [(-56.0, sy * 45.0) for sy in (1, -1)] + [(-39.0, sy * 45.0) for sy in (1, -1)]
 
 
 def notched_outline():
-    """Chamfered deck outline with zip-tie notches on both long edges."""
-    c, hx, hy, nw = CORNER, L / 2, W / 2, NOTCH_W / 2
-    xs = sorted(sx * z for z in ZIP_X for sx in (1, -1))
-    pts = [(-hx + c, -hy)]
-    for x in xs:                                   # bottom edge, left -> right
-        pts += [(x - nw, -hy), (x - nw, -hy + NOTCH_D), (x + nw, -hy + NOTCH_D), (x + nw, -hy)]
-    pts += [(hx - c, -hy), (hx, -hy + c), (hx, hy - c), (hx - c, hy)]
-    for x in reversed(xs):                         # top edge, right -> left
-        pts += [(x + nw, hy), (x + nw, hy - NOTCH_D), (x - nw, hy - NOTCH_D), (x - nw, hy)]
-    pts += [(-hx + c, hy), (-hx, hy - c), (-hx, -hy + c)]
-    return pts
+    """Chamfered deck outline: zip-tie notches on both long edges, and a tab by each motor's
+    back end that carries the outer motor wall."""
+    c, hx, hy, nw, gw = CORNER, L / 2, W / 2, NOTCH_W / 2, WALL_GAP / 2
+    feats = []
+    for sx in (1, -1):
+        a, b = sorted((sx * TAB_X[0], sx * TAB_X[1]))
+        feats += [("tab", a, sx * ZIP_X[0], b), ("notch", sx * ZIP_X[1])]
+    feats.sort(key=lambda f: f[1])
+    bottom = [(-hx + c, -hy)]                       # right-hand edge (y = -hy), back -> front
+    for f in feats:
+        if f[0] == "notch":
+            x = f[1]
+            bottom += [(x - nw, -hy), (x - nw, -hy + NOTCH_D), (x + nw, -hy + NOTCH_D), (x + nw, -hy)]
+        else:
+            _, a, zx, b = f
+            bottom += [(a, -hy), (a, -TAB_Y), (zx - gw, -TAB_Y), (zx - gw, -hy + 0.5),
+                       (zx + gw, -hy + 0.5), (zx + gw, -TAB_Y), (b, -TAB_Y), (b, -hy)]
+    bottom.append((hx - c, -hy))
+    top = [(x, -y) for x, y in reversed(bottom)]   # left-hand edge, mirrored
+    return bottom + [(hx, -hy + c), (hx, hy - c)] + top + [(-hx, hy - c), (-hx, -hy + c)]
+
+
+def spans(x0, x1, gaps):
+    """[x0, x1] minus a WALL_GAP around each gap position."""
+    out, a = [], x0
+    for g in sorted(gaps):
+        if x0 < g < x1:
+            out.append((a, g - WALL_GAP / 2))
+            a = g + WALL_GAP / 2
+    return out + [(a, x1)]
 
 
 def lower_deck():
@@ -63,33 +93,53 @@ def lower_deck():
     holes += [circle(cx + dx, cy + dy, M3_CLEAR, 24) for dx in (-p, p) for dy in (-p, p)]
     holes += [circle(x, y, M3_CLEAR, 24) for x, y in SENSOR_HOLES]
     holes += [circle(sx * 15, sy * 43, 5.0, 32) for sx in (1, -1) for sy in (1, -1)]  # motor wires
-    holes.append(rect(-12, -7, 12, 7))  # cable pass-through to upper deck
-    inner_y = MOTOR_OUT_Y - MOTOR_W - WALL_T  # 29.5
+    holes.append(rect(-12, -7, 12, 7))                                   # cables up to the top deck
+    holes += [circle(x, y, M3_TAP, 20) for x, y in BRACKET_HOLES]        # switch + gauge brackets
+    inner_y = MOTOR_OUT_Y - MOTOR_W - WALL_T                             # 29.5
     for sx in (1, -1):
         for sy in (1, -1):
-            for zx in ZIP_X:
-                x = sx * zx
+            for zx in ZIP_X:                                             # inner zip slot per tie
                 y0, y1 = sorted((sy * (inner_y - 4.0), sy * (inner_y - 1.0)))
-                holes.append(rect(x - 2.75, y0, x + 2.75, y1))            # inner zip slot
+                holes.append(rect(sx * zx - 2.75, y0, sx * zx + 2.75, y1))
+    for x in BATT_TIES:                                                  # battery: tie or strap slots
+        holes += [rect(x - 6, 22.5, x + 6, 25.5), rect(x - 6, -25.5, x + 6, -22.5)]
+    for y in BUCK_TIES + WAGO_TIES:                                      # converter + Wagos: tie slots
+        holes += [rect(sx * TIE_X - 1.3, y - 2.75, sx * TIE_X + 1.3, y + 2.75) for sx in (1, -1)]
     plate = extrude(notched_outline(), holes, 0, LOWER_T, "z")
 
     bodies = [plate]
-    # motor mounting walls hang below the deck, on the inboard side of each motor.
-    # Each wall has a gap where a zip tie crosses it, so the tie drops straight down past it.
-    spans, a = [], WALL_X[0]
-    for zx in sorted(ZIP_X):
-        if WALL_X[0] < zx < WALL_X[1]:
-            spans.append((a, zx - WALL_GAP / 2))
-            a = zx + WALL_GAP / 2
-    spans.append((a, WALL_X[1]))
+    # motor channel, hanging under the deck: a full-length inner wall, and an outer wall at the
+    # motor's back end. Gaps where the zip ties pass.
     for sx in (1, -1):
         for sy in (1, -1):
-            for w0, w1 in spans:
+            walls = [(w, (inner_y, inner_y + WALL_T)) for w in spans(*WALL_X, ZIP_X)]
+            walls += [(w, (MOTOR_OUT_Y + 0.3, TAB_Y)) for w in spans(*OUTER_X, ZIP_X)]
+            for (w0, w1), (ya, yb) in walls:
                 x0, x1 = sorted((sx * w0, sx * w1))
-                outline = rect(x0, -MOTOR_H, x1, 0.6)                 # (x, z)
-                y0, y1 = sorted((sy * inner_y, sy * (inner_y + WALL_T)))
-                bodies.append(extrude(outline, [], y0, y1, "y"))
+                y0, y1 = sorted((sy * ya, sy * yb))
+                bodies.append(extrude(rect(x0, -MOTOR_H, x1, 0.6), [], y0, y1, "y"))
     return bodies
+
+
+def bracket(kind):
+    """Small screw-on bracket at the deck edge. 'switch': the KCD1 rocker snaps into it.
+    'gauge': the battery voltmeter sits behind the window, held by a small zip tie.
+    Local frame: panel outer face at y = 0, foot pointing in (+y), z up from the deck top."""
+    Wb = BRACKET_X[1] - BRACKET_X[0]
+    PT = 1.8                                                              # panel thickness (KCD1 clips)
+    if kind == "switch":
+        H, g_top = 23.0, 14.0
+        holes = [rect((Wb - 19.5) / 2, 6.0, (Wb + 19.5) / 2, 19.3)]      # 19.5 x 13.3 mm window
+    else:
+        H, g_top = 24.0, 7.0
+        holes = [rect((Wb - 20.5) / 2, 10.0, (Wb + 20.5) / 2, 18.5),     # 20.5 x 8.5 mm window
+                 rect(Wb / 2 - 1.6, 7.4, Wb / 2 + 1.6, 8.8), rect(Wb / 2 - 1.6, 19.6, Wb / 2 + 1.6, 21.0)]
+    b = [extrude(rect(0, 0, Wb, H), holes, 0, PT, "y")]
+    b.append(extrude(rect(0, 0, Wb, 12.0), [circle(4.5, 7.0, M3_CLEAR, 24), circle(Wb - 4.5, 7.0, M3_CLEAR, 24)],
+                     0, 3.0, "z"))
+    for x0 in (0.0, Wb - 2.0):
+        b.append(extrude([(PT - 0.2, 2.8), (11.0, 2.8), (PT - 0.2, g_top)], [], x0, x0 + 2.0, "x"))
+    return b
 
 
 def upper_deck():
@@ -142,6 +192,8 @@ if __name__ == "__main__":
         "upper_deck": (upper_deck(), None),
         "sensor_bracket": (sensor_bracket(), [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]),  # face down
         "deck_posts_x4": (posts(), None),
+        "switch_bracket": (bracket("switch"), [[1, 0, 0], [0, 0, -1], [0, 1, 0]]),   # panel flat on the bed
+        "gauge_bracket": (bracket("gauge"), [[1, 0, 0], [0, 0, -1], [0, 1, 0]]),
     }
     for name, (bodies, R) in parts.items():
         for b in bodies:
