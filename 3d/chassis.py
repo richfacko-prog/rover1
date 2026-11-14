@@ -19,7 +19,7 @@ L, W = 200.0, 110.0          # deck length / width
 LOWER_T, UPPER_T = 4.0, 3.5  # deck thickness
 CORNER = 8.0
 POST_H = 45.0                # gap between decks
-UPPER_FRONT = 130.0          # upper deck extends 30 mm forward to fit a 127 mm power bank
+UPPER_FRONT = 130.0          # upper deck extends 30 mm forward: camera mount + mini breadboard up front
 POSTS = [(sx * 95.5, sy * 40) for sx in (1, -1) for sy in (1, -1)]  # past the motor ends
 M3_CLEAR = 1.7               # radius, M3 clearance hole
 M3_TAP = 1.4                 # radius, M3 self-tapping into plastic
@@ -30,10 +30,12 @@ MOTOR_W = 22.5               # gearbox width along the axle
 MOTOR_H = 18.8               # motor thickness
 MOTOR_OUT_Y = W / 2          # outer face of motor flush with deck edge
 WALL_T = 3.0
-WALL_X = (22.0, 90.0)        # inner wall along the WHOLE motor (motor end to gearbox end)
-OUTER_X = (22.0, 44.0)       # outer wall at the motor end (stays clear of the wheel)
-TAB_X = (20.0, 46.0)         # deck widened here to carry the outer wall
-TAB_Y = MOTOR_OUT_Y + 0.3 + WALL_T   # 58.3: outer edge of that tab
+WALL_X = (42.0, 72.0)        # inner wall beside the gearbox; stops before the inner axle stub (x 80)
+CAN_X = (22.0, 42.0)         # clamp round the silver motor can at the back end
+CAN_W = 20.1                 # can width (FF-130 can: 20.1 mm, centred on the 22.5 mm gearbox)
+CAN_CLR = 0.2                # clearance each side
+TAB_X = (20.0, 42.0)         # deck widened 1 mm here; ends 5.5 mm before the wheel (wheel starts at x 47.5)
+TAB_Y = MOTOR_OUT_Y + 1.0    # 56.0
 ZIP_X = (31.0, 64.0)         # zip ties: one round the motor body, one round the gearbox
 NOTCH_W, NOTCH_D = 5.5, 2.0  # edge notch that locates the zip tie
 WALL_GAP = 6.5               # gap in the walls where a zip tie passes
@@ -68,8 +70,8 @@ def notched_outline():
             bottom += [(x - nw, -hy), (x - nw, -hy + NOTCH_D), (x + nw, -hy + NOTCH_D), (x + nw, -hy)]
         else:
             _, a, zx, b = f
-            bottom += [(a, -hy), (a, -TAB_Y), (zx - gw, -TAB_Y), (zx - gw, -hy + 0.5),
-                       (zx + gw, -hy + 0.5), (zx + gw, -TAB_Y), (b, -TAB_Y), (b, -hy)]
+            bottom += [(a, -hy), (a, -TAB_Y), (zx - gw, -TAB_Y), (zx - gw, -hy + 1.5),
+                       (zx + gw, -hy + 1.5), (zx + gw, -TAB_Y), (b, -TAB_Y), (b, -hy)]
     bottom.append((hx - c, -hy))
     top = [(x, -y) for x, y in reversed(bottom)]   # left-hand edge, mirrored
     return bottom + [(hx, -hy + c), (hx, hy - c)] + top + [(-hx, hy - c), (-hx, -hy + c)]
@@ -108,12 +110,17 @@ def lower_deck():
     plate = extrude(notched_outline(), holes, 0, LOWER_T, "z")
 
     bodies = [plate]
-    # motor channel, hanging under the deck: a full-length inner wall, and an outer wall at the
-    # motor's back end. Gaps where the zip ties pass.
+    # under the deck: a snug clamp on both sides of the motor can (back end), and an inner wall
+    # beside the gearbox that stops before the axle stub. Nothing sticks out near the wheel.
+    # Gaps where the zip ties pass.
     for sx in (1, -1):
         for sy in (1, -1):
+            side = (MOTOR_W - CAN_W) / 2                                  # 1.2: can is narrower than the gearbox
+            can_in = MOTOR_OUT_Y - MOTOR_W + side - CAN_CLR                # 33.5: inner face of the can clamp
+            can_out = MOTOR_OUT_Y - side + CAN_CLR                         # 54.0: outer face
             walls = [(w, (inner_y, inner_y + WALL_T)) for w in spans(*WALL_X, ZIP_X)]
-            walls += [(w, (MOTOR_OUT_Y + 0.3, TAB_Y)) for w in spans(*OUTER_X, ZIP_X)]
+            walls += [(w, (inner_y, can_in)) for w in spans(*CAN_X, ZIP_X)]
+            walls += [(w, (can_out, TAB_Y)) for w in spans(*CAN_X, ZIP_X)]
             for (w0, w1), (ya, yb) in walls:
                 x0, x1 = sorted((sx * w0, sx * w1))
                 y0, y1 = sorted((sy * ya, sy * yb))
@@ -145,11 +152,11 @@ def bracket(kind):
 def upper_deck():
     holes = [circle(x, y, M3_CLEAR, 24) for x, y in POSTS]
     holes += [circle(x, y, 1.2, 20) for x in PI_HOLES_X for y in PI_HOLES_Y]
-    # power bank: 127 x 51 mm (5 x 2 in), lying lengthwise from x = 0 to 127
+    # zip-tie slots on the front half: mini breadboard (47 x 35 mm) between the first pair, spare pair further on
     holes += [rect(x0, 30, x0 + 22, 34) for x0 in (25, 85)]
-    holes += [rect(x0, -34, x0 + 22, -30) for x0 in (25, 85)]               # power-bank strap slots
-    holes.append(rect(-11, -8, -2, 8))                                      # cable pass-through
-    holes += [circle(118, y, M3_CLEAR, 24) for y in (42, -42)]             # future camera mast
+    holes += [rect(x0, -34, x0 + 22, -30) for x0 in (25, 85)]               # zip-tie / strap slots
+    holes.append(rect(-9, -10, 3, 10))                                      # cable slot: USB-C plug + jumper wires
+    holes += [circle(118, y, M3_CLEAR, 24) for y in (42, -42)]             # camera mount
     plate = extrude(chamfered_rect(-L / 2, -W / 2, UPPER_FRONT, W / 2, CORNER), holes, 0, UPPER_T, "z")
     bodies = [plate]
     for x in PI_HOLES_X:
